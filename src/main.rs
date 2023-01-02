@@ -76,11 +76,35 @@ mod tests
     #[test]
     fn tree_test()
     {
-        let mut root = TreeNode::new("1".to_string());
-        root.add_left_node(TreeNode::new("3".to_string()));
-        root.add_right_node(TreeNode::new("2".to_string()));
-        println!("show");
-        let node = Rc::new(root);
-        show_tree(&node);
+        let mut root = TreeNode::new("0".to_string());
+
+        let str = show_tree(&root);
+        println!("{}", str);
+        assert_eq!(str, "0, ".to_string());
+
+        let mut n1 = TreeNode::new("1".to_string());
+        let mut n2 = TreeNode::new("2".to_string());
+        let mut n3 = TreeNode::new("3".to_string());
+        let mut n4 = TreeNode::new("4".to_string());
+        let mut n5 = TreeNode::new("5".to_string());
+        let mut n6 = TreeNode::new("6".to_string());
+
+        // ２分木の生成
+        //     0
+        //   1   2
+        //  3 4 5 6
+        n1.add_left_node(n3);
+        n1.add_right_node(n4);
+        n2.add_left_node(n5);
+        n2.add_right_node(n6);
+        root.add_left_node(n1);
+        root.add_right_node(n2);
+
+        // 深さ優先探索
+        let str = show_tree(&root);
+        println!("{}", str);
+        assert_eq!(str, "0, 1, 2, 3, 4, 5, 6, ")
+
+        ;
     }
 }

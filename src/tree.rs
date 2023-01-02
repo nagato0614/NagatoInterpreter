@@ -1,6 +1,7 @@
 use std::borrow::{Borrow, BorrowMut};
 use std::cell::{Ref, RefCell};
 use std::collections::{HashMap, VecDeque};
+use std::fmt;
 use std::fmt::Display;
 use anyhow::{bail, ensure, Context, Result};
 use std::io::{BufRead, BufReader, stdin};
@@ -47,19 +48,25 @@ pub fn create_node(val: String) -> Rc<TreeNode>
 }
 
 // 幅優先探索で構造を表示
-pub fn show_tree(root: &Rc<TreeNode>)
+#[allow(unreachable_code)]
+pub fn show_tree(root: &TreeNode) -> String
 {
+    let r = Rc::new(root.clone());
     let mut v: VecDeque<&Rc<TreeNode>> = VecDeque::new();
-    v.push_back(root);
-    while true
+    v.push_back(&r);
+    let mut result_str = String::new();
+    // cargo clippy で unreachable になる
+    loop
     {
         let Some(n) = v.pop_front() else { break; };
 
         if let Some(value) = &n.val
         {
-            print!("{}, ", value);
-        } else {
-            print!(" , ");
+            result_str += format!("{}, ", value).borrow();
+        }
+        else
+        {
+            result_str += ", ";
         }
 
         if let Some(node) = &n.left
@@ -72,4 +79,5 @@ pub fn show_tree(root: &Rc<TreeNode>)
             v.push_back(&node);
         }
     }
+    result_str
 }
