@@ -57,7 +57,7 @@ mod tests
     #[test]
     fn variable_test()
     {
-        let mut exec = NagatoLang::new();
+        let mut exec: NagatoLang = NagatoLang::new();
         exec.add_variable("a".to_string(), 1);
         exec.add_variable("b".to_string(), 2);
         assert_eq!(exec.get_variable_value("a".to_string()).unwrap(), 1);
@@ -76,9 +76,11 @@ mod tests
     #[test]
     fn tree_test()
     {
-        let mut root = create_node("1".to_string());
-        root.borrow_mut().add_right_node(TreeNode::new("2".to_string()));
-        root.borrow_mut().add_left_node(TreeNode::new("3".to_string()));
+        let mut root = TreeNode::new("1".to_string());
+        root.add_left_node(TreeNode::new("3".to_string()));
+        root.add_right_node(TreeNode::new("2".to_string()));
         println!("show");
+        let node = Rc::new(root);
+        show_tree(&node);
     }
 }

@@ -1,18 +1,19 @@
 use std::borrow::{Borrow, BorrowMut};
 use std::cell::{Ref, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fmt::Display;
 use anyhow::{bail, ensure, Context, Result};
 use std::io::{BufRead, BufReader, stdin};
 use std::fs::File;
 use std::rc::Rc;
 
+// TODO: 値を可変にできるようにする.
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct TreeNode
 {
     pub val: Option<String>,
-    pub left:  Option<Rc<RefCell<TreeNode>>>,
-    pub right:  Option<Rc<RefCell<TreeNode>>>,
+    pub left: Option<Rc<TreeNode>>,
+    pub right: Option<Rc<TreeNode>>,
 }
 
 impl TreeNode
@@ -29,46 +30,46 @@ impl TreeNode
 
     pub fn add_left_node(&mut self, left: TreeNode) -> &mut TreeNode
     {
-        self.left = Some(Rc::new(RefCell::new(left)));
+        self.left = Some(Rc::new(left));
         self
     }
 
     pub fn add_right_node(&mut self, right: TreeNode) -> &mut TreeNode
     {
-        self.right = Some(Rc::new(RefCell::new(right)));
+        self.right = Some(Rc::new(right));
         self
     }
 }
 
-pub fn create_node(val: String) -> Rc<RefCell<TreeNode>>
+pub fn create_node(val: String) -> Rc<TreeNode>
 {
-    Rc::new(RefCell::new(TreeNode::new(val.clone())))
+    Rc::new(TreeNode::new(val.clone()))
 }
 
 // 幅優先探索で構造を表示
-pub fn show_tree(root: &Rc<RefCell<TreeNode>>)
+pub fn show_tree(root: &Rc<TreeNode>)
 {
-    let mut v = Vec::new();
-    v.push(root);
-    for n in v.pop()
+    let mut v: VecDeque<&Rc<TreeNode>> = VecDeque::new();
+    v.push_back(root);
+    while true
     {
-        if let Some(value) = &n.borrow_mut().val
+        let Some(n) = v.pop_front() else { break; };
+
+        if let Some(value) = &n.val
         {
             print!("{}, ", value);
-        }
-        else
-        {
+        } else {
             print!(" , ");
         }
 
-        if let Some(node) = n.borrow().left
+        if let Some(node) = &n.left
         {
-            v.push(&node);
+            v.push_back(&node);
         }
 
-        if let Some(node) = n.borrow().right
+        if let Some(node) = &n.right
         {
-            v.push(&node);
+            v.push_back(&node);
         }
     }
 }
