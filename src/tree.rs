@@ -67,6 +67,7 @@ impl fmt::Display for Token
     }
 }
 
+/// トークンを生成する
 impl Token
 {
     pub fn new(str: String) -> Token
@@ -78,101 +79,196 @@ impl Token
             Token::Op(Operand::from_string(str))
         }
     }
-
 }
 
-// TODO: 値を可変にできるようにする.
+// ２分木を配列で表現する
+#[derive(Debug, PartialEq, Eq, Clone, Default)]
+pub struct Tree
+{
+    pub nodes: Vec<TreeNode>,
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct TreeNode
 {
     pub val: Option<Token>,
-    pub left: Option<Rc<RefCell<TreeNode>>>,
-    pub right: Option<Rc<RefCell<TreeNode>>>,
+    pub left: Option<u32>,
+    pub right: Option<u32>,
 }
+
+impl Tree
+{
+    pub fn new(token: Token) -> Tree
+    {
+        let mut tree = Tree::default();
+        let mut root = TreeNode::new(token);
+        tree.nodes.push(root);
+        return tree;
+    }
+
+    pub fn empty_node() -> Tree
+    {
+        Tree::default()
+    }
+
+    /// 二分木にノードを追加する
+    pub fn add_value(&mut self, token: Token)
+    {
+        // ノード生成
+        let new_node = TreeNode::new(token);
+
+        // 追加するノードを探す
+        let mut node = self.find_empty_node();
+    }
+
+    /// 子ノードを持っていないノードを見つける
+    /// 幅優先探索
+    pub fn find_empty_node(&self) -> Option<&TreeNode>
+    {
+        // ツリーがからの場合はNoneを返す
+        if self.nodes.len() == 0
+        {
+            return None;
+        }
+
+        // ルートノードから探索を開始する
+        let mut queue = VecDeque::new();
+
+        // ルートノードを追加
+        queue.push_back(&self.nodes[0]);
+
+        // ノードを探索
+        while let Some(node) = queue.pop_front()
+        {
+            // 子ノードを持っていないノードを返す
+            if node.left.is_none() || node.right.is_none()
+            {
+                return Some(node);
+            }
+
+            // 子ノードを追加
+            if let Some(left) = node.left
+            {
+                queue.push_back(&self.nodes[left as usize]);
+            }
+
+            // 子ノードを追加
+            if let Some(right) = node.right
+            {
+                queue.push_back(&self.nodes[right as usize]);
+            }
+        }
+
+        // ノードが見つからない場合はNoneを返す
+        None
+    }
+
+    pub fn add_str(&mut self, str: String)
+    {
+        let token = Token::new(str);
+        self.add_node(token);
+    }
+
+    /// 左か右にノードを追加する
+    /// 左側が優先,
+    /// 両方にノードがある場合は追加しない
+    pub fn add_node(&mut self, token: Token)
+    {
+        // 追加するノードを探す
+        let mut node = self.find_empty_node();
+
+        if let Some(mut node) = node {
+            if node.left.is_none()
+            {
+                let mut new_node = TreeNode::new(token);
+                new_node.left = Some((self.nodes.len() + 1) as u32);
+                self.nodes.push(new_node);
+                return;
+            }
+            else if node.right.is_none()
+            {
+                let mut new_node = TreeNode::new(token);
+                new_node.right = Some((self.nodes.len() + 1) as u32);
+                self.nodes.push(new_node);
+                return;
+            }
+        }
+    }
+}
+
 
 impl TreeNode
 {
+    /// ノードを生成する
     pub fn new(value: Token) -> TreeNode
     {
         TreeNode { val: Some(value.clone()), left: None, right: None }
     }
 
+    /// 数値のノードを生成する
     pub fn new_val(value: i32) -> TreeNode
     {
         TreeNode { val: Some(Token::Val(value)), left: None, right: None }
     }
 
+    /// 演算子のノードを生成する
     pub fn new_op(op: String) -> TreeNode
     {
         TreeNode { val: Some(Token::Op(Operand::from_string(op))), left: None, right: None }
     }
 
+    /// 文字列のノードを生成する
     pub fn new_string(str: String) -> TreeNode
     {
         TreeNode { val: Some(Token::new(str)), left: None, right: None }
     }
 
+
+    /// 空のノードを生成する
     pub fn empty_node() -> TreeNode
     {
         TreeNode { val: None, left: None, right: None }
     }
 
+    /// ノードに値を追加する
     pub fn add_value(&mut self, val: Token)
     {
         self.val = Some(val.clone());
     }
-
-    pub fn add_left_node(&mut self, left: TreeNode) -> &mut TreeNode
-    {
-        self.left = Some(Rc::new(RefCell::new(left)));
-        self
-    }
-
-    pub fn add_right_node(&mut self, right: TreeNode) -> &mut TreeNode
-    {
-        self.right = Some(Rc::new(RefCell::new(right)));
-        self
-    }
 }
 
-pub fn create_node(val: String) -> Rc<RefCell<TreeNode>>
-{
-    Rc::new(RefCell::new(TreeNode::new_string(val.clone())))
-}
 
 // 幅優先探索で構造を表示
 #[allow(unreachable_code)]
-pub fn show_tree(root: &TreeNode) -> String
+pub fn show_tree(root: &Tree) -> String
 {
-    let mut v: VecDeque<TreeNode> = VecDeque::new();
-    v.push_back(root.clone());
-    let mut result_str = String::new();
+    let mut queue = VecDeque::new();
+    let mut result = String::from("");
 
-    if TreeNode::empty_node() == root.clone()
-    {
-        return "".to_string();
-    }
-    // clone したらコピーに時間がかかると思われる
-    loop
-    {
-        let Some(node) = v.pop_front() else { break; };
+    // ルートノードを追加
+    queue.push_back(&root.nodes[0]);
 
-        if let Some(token) = node.val.borrow()
+    // ノードを探索
+    while let Some(node) = queue.pop_front()
+    {
+        // ノードの値を表示
+        if let Some(val) = &node.val
         {
-            result_str += format!("{}, ", token).borrow();
-        } else {
-            result_str += "";
+            result.push_str(&format!("{}, ", val));
         }
 
-        if let Some(node) = node.left.clone()
+        // 子ノードを追加
+        if let Some(left) = node.left
         {
-            v.push_back(node.take());
+            queue.push_back(&root.nodes[left as usize]);
         }
 
-        if let Some(node) = node.right.clone()
+        // 子ノードを追加
+        if let Some(right) = node.right
         {
-            v.push_back(node.take());
+            queue.push_back(&root.nodes[right as usize]);
         }
     }
-    result_str
+
+    return result;
 }

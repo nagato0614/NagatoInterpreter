@@ -1,12 +1,9 @@
-use std::borrow::{Borrow, BorrowMut};
-use std::cell::RefCell;
+use std::borrow::Borrow;
 use std::collections::HashMap;
-use anyhow::{bail, ensure, Context, Result};
-use std::io::{BufRead, BufReader, stdin};
+use anyhow::Result;
+use std::io::BufReader;
 use std::fs::File;
-use std::ptr::{null, swap};
-use std::rc::Rc;
-use crate::tree::{create_node, Operand, Token, TreeNode};
+use crate::tree::{Tree, Token};
 
 #[derive(Debug, Default)]
 pub struct NagatoLang
@@ -41,47 +38,54 @@ pub fn lexical_analysis()
 pub fn semantic_analysis()
 {}
 
-pub fn syntax_analysis(line: String) -> TreeNode
+pub fn syntax_analysis(line: String) -> Tree
 {
     let mut root ;
     let mut split_line = line.split_whitespace();
 
+    // ルートノードの作成
     if let Some(token) = split_line.next()
     {
-        root = create_node(token.to_string());
+        // トークンがある場合はトークンをルートノードに設定
+        root = Tree::new(Token::new(token.to_string()));
     }
     else
     {
-        return TreeNode::empty_node();
+        // トークンがない場合は空のノードを返す
+        return Tree::empty_node();
     }
 
+    // ルートノードの子ノードの作成
     loop
     {
-        // todo: アーリーリターンがしたい
+
+        // トークンがある場合はトークンをルートノードに設定
         if let Some(token) = split_line.next()
         {
+            // トークンが演算子か値かを判定
             if let Token::Op(operand) = Token::new(token.to_string())
             {
-                root.borrow_mut().add_value(Token::Op(operand));
+                root.add_value(Token::Op(operand));
             }
             else if let Token::Val(value) = Token::new(token.to_string())
             {
-                root.borrow_mut().get_mut().val = Some(Token::Val(value))
+                root.add_value(Token::Val(value));
             }
             else
             {
+                // トークンがない場合は空のノードを返す
                 eprintln!("this is not operand or value : {}", token.to_string());
                 panic!();
             }
         }
         else
         {
-            return root.take();
+            // トークンがない場合は空のノードを返す
+            return root;
         }
 
 
     }
-    TreeNode::empty_node()
 }
 
 pub fn get_number(token: String) -> Result<i32, String>
