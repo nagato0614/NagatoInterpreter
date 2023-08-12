@@ -1,5 +1,5 @@
 use std::borrow::{Borrow, BorrowMut};
-use std::cell::{Ref, RefCell};
+use std::cell::{Cell, Ref, RefCell};
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::fmt::{Display, Error, write};
@@ -55,7 +55,7 @@ pub enum Token
     Other,
 }
 
-impl fmt::Display for Token
+impl Display for Token
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
     {
@@ -85,15 +85,15 @@ impl Token
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct Tree
 {
-    pub nodes: Vec<TreeNode>,
+    pub nodes: RefCell<Vec<RefCell<TreeNode>>>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct TreeNode
 {
     pub val: Option<Token>,
-    pub left: Option<u32>,
-    pub right: Option<u32>,
+    pub left: Cell<Option<usize>>,
+    pub right: Cell<Option<usize>>,
 }
 
 impl Tree
@@ -101,8 +101,8 @@ impl Tree
     pub fn new(token: Token) -> Tree
     {
         let mut tree = Tree::default();
-        let mut root = TreeNode::new(token);
-        tree.nodes.push(root);
+        let root = TreeNode::new(token);
+        tree.nodes.borrow_mut().push(RefCell::new(root));
         return tree;
     }
 
@@ -123,10 +123,11 @@ impl Tree
 
     /// 子ノードを持っていないノードを見つける
     /// 幅優先探索
-    pub fn find_empty_node(&self) -> Option<&TreeNode>
+    /// 戻り地はノードのインデックス
+    pub fn find_empty_node(&self) -> Option<usize>
     {
         // ツリーがからの場合はNoneを返す
-        if self.nodes.len() == 0
+        if self.nodes.borrow().len() == 0
         {
             return None;
         }
@@ -135,28 +136,27 @@ impl Tree
         let mut queue = VecDeque::new();
 
         // ルートノードを追加
-        queue.push_back(&self.nodes[0]);
+        queue.push_back(0usize);
 
-        // ノードを探索
-        while let Some(node) = queue.pop_front()
+        // キューが空になるまで探索を続ける
+        while let Some(node_index) = queue.pop_front()
         {
-            // 子ノードを持っていないノードを返す
-            if node.left.is_none() || node.right.is_none()
+            // ノードを取得
+            let node = &self.nodes.borrow()[node_index as usize];
+
+            // 左右のノードを取得
+            let left = node.borrow().left.get();
+            let right = node.borrow().right.get();
+
+            // 左右のノードがない場合はそのノードを返す
+            if left.is_none() || right.is_none()
             {
-                return Some(node);
+                return Some(node_index);
             }
 
-            // 子ノードを追加
-            if let Some(left) = node.left
-            {
-                queue.push_back(&self.nodes[left as usize]);
-            }
-
-            // 子ノードを追加
-            if let Some(right) = node.right
-            {
-                queue.push_back(&self.nodes[right as usize]);
-            }
+            // 左右のノードがある場合はキューに追加
+            queue.push_back(left.unwrap());
+            queue.push_back(right.unwrap());
         }
 
         // ノードが見つからない場合はNoneを返す
@@ -172,25 +172,23 @@ impl Tree
     /// 左か右にノードを追加する
     /// 左側が優先,
     /// 両方にノードがある場合は追加しない
-    pub fn add_node(&mut self, token: Token)
-    {
+    pub fn add_node(&mut self, token: Token) {
         // 追加するノードを探す
-        let mut node = self.find_empty_node();
+        if let Some(node_index) = self.find_empty_node() {
+            let mut nodes = &mut self.nodes.borrow_mut();
+            let mut node = &mut nodes[node_index].borrow_mut();
 
-        if let Some(mut node) = node {
-            if node.left.is_none()
-            {
-                let mut new_node = TreeNode::new(token);
-                new_node.left = Some((self.nodes.len() + 1) as u32);
-                self.nodes.push(new_node);
-                return;
-            }
-            else if node.right.is_none()
-            {
-                let mut new_node = TreeNode::new(token);
-                new_node.right = Some((self.nodes.len() + 1) as u32);
-                self.nodes.push(new_node);
-                return;
+            if node.left.get().is_none() {
+                // 左側にノードがない場合は左側に追加
+                let new_node_index = nodes.len();
+                node.left.set(Some(new_node_index));
+                nodes.push(RefCell::new(TreeNode::new(token)));
+            } else if node.right.get().is_none() {
+
+                // 右側にノードがない場合は右側に追加
+                let new_node_index = nodes.len();
+                node.right.set(Some(new_node_index));
+                nodes.push(RefCell::new(TreeNode::new(token)));
             }
         }
     }
@@ -202,32 +200,37 @@ impl TreeNode
     /// ノードを生成する
     pub fn new(value: Token) -> TreeNode
     {
-        TreeNode { val: Some(value.clone()), left: None, right: None }
+        TreeNode {
+            val: Some(value.clone()),
+            left: Cell::new(None),
+            right:
+            Cell::new(None)
+        }
     }
 
     /// 数値のノードを生成する
     pub fn new_val(value: i32) -> TreeNode
     {
-        TreeNode { val: Some(Token::Val(value)), left: None, right: None }
+        TreeNode { val: Some(Token::Val(value)), left: Cell::new(None), right: Cell::new(None) }
     }
 
     /// 演算子のノードを生成する
     pub fn new_op(op: String) -> TreeNode
     {
-        TreeNode { val: Some(Token::Op(Operand::from_string(op))), left: None, right: None }
+        TreeNode { val: Some(Token::Op(Operand::from_string(op))), left: Cell::new(None), right: Cell::new(None) }
     }
 
     /// 文字列のノードを生成する
     pub fn new_string(str: String) -> TreeNode
     {
-        TreeNode { val: Some(Token::new(str)), left: None, right: None }
+        TreeNode { val: Some(Token::new(str)), left: Cell::new(None), right: Cell::new(None) }
     }
 
 
     /// 空のノードを生成する
     pub fn empty_node() -> TreeNode
     {
-        TreeNode { val: None, left: None, right: None }
+        TreeNode { val: None, left: Cell::new(None), right: Cell::new(None) }
     }
 
     /// ノードに値を追加する
@@ -245,30 +248,36 @@ pub fn show_tree(root: &Tree) -> String
     let mut queue = VecDeque::new();
     let mut result = String::from("");
 
-    // ルートノードを追加
-    queue.push_back(&root.nodes[0]);
+    let nodes = root.nodes.borrow();
+
+    // ノードのインデックスを追加
+    queue.push_back(0usize);
 
     // ノードを探索
-    while let Some(node) = queue.pop_front()
+    while let Some(node_index) = queue.pop_front()
     {
+
+        // ノードを取得
+        let node = nodes[node_index].borrow();
+
+        // ノードの値を取得
+        let val = node.val.clone().unwrap();
+
         // ノードの値を表示
-        if let Some(val) = &node.val
-        {
-            result.push_str(&format!("{}, ", val));
-        }
+        result.push_str(&format!("{}, ", val));
 
-        // 子ノードを追加
-        if let Some(left) = node.left
-        {
-            queue.push_back(&root.nodes[left as usize]);
-        }
 
-        // 子ノードを追加
-        if let Some(right) = node.right
+        // 左右のノードがある場合はキューに追加
+        if let Some(left) = node.left.get()
         {
-            queue.push_back(&root.nodes[right as usize]);
+            queue.push_back(left);
+        }
+        if let Some(right) = node.right.get()
+        {
+            queue.push_back(right);
         }
     }
+
 
     return result;
 }
