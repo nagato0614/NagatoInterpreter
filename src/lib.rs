@@ -29,7 +29,7 @@ enum ArithmeticOperandHead
 }
 
 #[derive(Debug, Clone)]
- enum Token
+enum Token
 {
     Value(i32),
     OperatorHead(ArithmeticOperandHead),
@@ -70,6 +70,7 @@ impl fmt::Display for Token
 pub struct Interpreter
 {
     variables: HashMap<String, i32>,
+    contents: String,
 }
 
 
@@ -79,7 +80,8 @@ impl Interpreter
     {
         Interpreter
         {
-            variables: HashMap::new()
+            variables: HashMap::new(),
+            contents: String::new(),
         }
     }
 
@@ -108,13 +110,21 @@ impl Interpreter
     {
         let mut f = self.parse_arguments();
 
-        let mut contents = String::new();
-        f.read_to_string(&mut contents).expect("Failed to read file");
+
+        f.read_to_string(&mut self.contents).expect("Failed to read file");
 
 
-        for line in contents.lines() {
+        self.run_interpreter();
+    }
+
+    fn run_interpreter(&mut self)
+    {
+        let lines: Vec<String> = self.contents.lines().map(
+            |line| line.to_string()
+        ).collect();
+        for line in lines {
             // 1行をトークンに分割する
-            let tokens = self.parse_line(line);
+            let tokens = self.parse_line(line.as_str());
 
             // 文字列をtoken型の列に変換する
             let tokens: Vec<Token> = tokens.iter().map(|token| self.convert_token(token)).collect();
@@ -184,9 +194,7 @@ impl Interpreter
                     if let Some(val) = self.variables.get(var)
                     {
                         *val
-                    }
-                    else
-                    {
+                    } else {
                         panic!("変数がありません : {}", var);
                     }
                 }
@@ -197,7 +205,7 @@ impl Interpreter
         }
     }
 
-     fn term(&mut self, tokens: &mut Vec<Token>) -> i32
+    fn term(&mut self, tokens: &mut Vec<Token>) -> i32
     {
         if tokens.len() == 0
         {
@@ -221,6 +229,12 @@ impl Interpreter
                     {
                         let second = tokens.pop().unwrap();
                         let s = self.factor(&second);
+
+                        if s == 0
+                        {
+                            panic!("0で割ることはできません");
+                        }
+
                         result /= s;
                     }
                 Token::OperatorTail(ArithmeticOperandTail::Mod) =>
@@ -244,7 +258,7 @@ impl Interpreter
 
         result
     }
-     fn run_line(&mut self, mut tokens: Vec<Token>)
+    fn run_line(&mut self, mut tokens: Vec<Token>)
     {
         // 変数一つだけの場合はそのまま表示
         if tokens.len() == 1 {
@@ -266,7 +280,7 @@ impl Interpreter
         self.equation(tokens);
     }
 
-     fn equation(&mut self, mut tokens: Vec<Token>) -> i32
+    fn equation(&mut self, mut tokens: Vec<Token>) -> i32
     {
         let first = tokens.pop().unwrap();
         let second = tokens.pop().unwrap();
@@ -286,16 +300,14 @@ impl Interpreter
         if let Token::Variable(var) = first
         {
             self.variables.insert(var, result);
-        }
-        else
-        {
+        } else {
             panic!("変数がありません : {}", first);
         }
 
         result
     }
 
-     fn arithmetic_equation(&mut self, mut tokens: Vec<Token>) -> i32
+    fn arithmetic_equation(&mut self, mut tokens: Vec<Token>) -> i32
     {
         let mut result = self.term(&mut tokens);
         while tokens.len() > 0
@@ -321,7 +333,7 @@ impl Interpreter
         result
     }
 
-     fn convert_token(&mut self, token: &str) -> Token
+    fn convert_token(&mut self, token: &str) -> Token
     {
         match token {
             PLUS => Token::OperatorHead(ArithmeticOperandHead::Plus),
@@ -346,140 +358,75 @@ impl Interpreter
 mod tests {
     use super::*;
 
+    fn run_program(program: &str) -> Interpreter {
+        let mut interpreter = Interpreter::new();
+        interpreter.contents = program.to_string();
+        interpreter.run_interpreter();
+        interpreter
+    }
+
     #[test]
     fn test_arithmetic_addition() {
-        let mut interpreter = Interpreter::new();
-        let tokens = vec![
-            Token::Variable("a".to_string()),
-            Token::Assign,
-            Token::Value(5),
-        ];
-        interpreter.run_line(tokens);
-
-        let tokens = vec![
-            Token::Variable("b".to_string()),
-            Token::Assign,
-            Token::Value(10),
-        ];
-        interpreter.run_line(tokens);
-
-        let tokens = vec![
-            Token::Variable("c".to_string()),
-            Token::Assign,
-            Token::Variable("a".to_string()),
-            Token::OperatorHead(ArithmeticOperandHead::Plus),
-            Token::Variable("b".to_string()),
-        ];
-        interpreter.run_line(tokens);
-
+        let interpreter = run_program("
+            a = 5
+            b = 10
+            c = a + b
+        ");
         assert_eq!(interpreter.variables.get("c"), Some(&15));
     }
 
     #[test]
     fn test_arithmetic_subtraction() {
-        let mut interpreter = Interpreter::new();
-        let tokens = vec![
-            Token::Variable("x".to_string()),
-            Token::Assign,
-            Token::Value(20),
-        ];
-        interpreter.run_line(tokens);
-
-        let tokens = vec![
-            Token::Variable("y".to_string()),
-            Token::Assign,
-            Token::Value(8),
-        ];
-        interpreter.run_line(tokens);
-
-        let tokens = vec![
-            Token::Variable("z".to_string()),
-            Token::Assign,
-            Token::Variable("x".to_string()),
-            Token::OperatorHead(ArithmeticOperandHead::Minus),
-            Token::Variable("y".to_string()),
-        ];
-        interpreter.run_line(tokens);
-
+        let interpreter = run_program("
+            x = 20
+            y = 8
+            z = x - y
+        ");
         assert_eq!(interpreter.variables.get("z"), Some(&12));
     }
 
     #[test]
     fn test_arithmetic_multiplication() {
-        let mut interpreter = Interpreter::new();
-        let tokens = vec![
-            Token::Variable("m".to_string()),
-            Token::Assign,
-            Token::Value(3),
-        ];
-        interpreter.run_line(tokens);
-
-        let tokens = vec![
-            Token::Variable("n".to_string()),
-            Token::Assign,
-            Token::Value(7),
-        ];
-        interpreter.run_line(tokens);
-
-        let tokens = vec![
-            Token::Variable("p".to_string()),
-            Token::Assign,
-            Token::Variable("m".to_string()),
-            Token::OperatorTail(ArithmeticOperandTail::Multiply),
-            Token::Variable("n".to_string()),
-        ];
-        interpreter.run_line(tokens);
-
+        let interpreter = run_program("
+            m = 3
+            n = 7
+            p = m * n
+        ");
         assert_eq!(interpreter.variables.get("p"), Some(&21));
     }
 
     #[test]
     fn test_arithmetic_division() {
-        let mut interpreter = Interpreter::new();
-        let tokens = vec![
-            Token::Variable("a".to_string()),
-            Token::Assign,
-            Token::Value(20),
-        ];
-        interpreter.run_line(tokens);
-
-        let tokens = vec![
-            Token::Variable("b".to_string()),
-            Token::Assign,
-            Token::Value(4),
-        ];
-        interpreter.run_line(tokens);
-
-        let tokens = vec![
-            Token::Variable("c".to_string()),
-            Token::Assign,
-            Token::Variable("a".to_string()),
-            Token::OperatorTail(ArithmeticOperandTail::Divide),
-            Token::Variable("b".to_string()),
-        ];
-        interpreter.run_line(tokens);
-
+        let interpreter = run_program("
+            a = 20
+            b = 4
+            c = a / b
+        ");
         assert_eq!(interpreter.variables.get("c"), Some(&5));
     }
 
     #[test]
     #[should_panic(expected = "変数がありません")]
     fn test_variable_not_found() {
-        let mut interpreter = Interpreter::new();
-        let tokens = vec![Token::Variable("undefined".to_string())];
-        interpreter.run_line(tokens);
+        let _interpreter = run_program("undefined");
     }
 
     #[test]
-    #[should_panic(expected = "トークンがありません")]
+    #[should_panic(expected = "代入演算子がありません")]
     fn test_invalid_operator() {
-        let mut interpreter = Interpreter::new();
-        let tokens = vec![
-            Token::Variable("a".to_string()),
-            Token::Assign,
-            Token::Value(5),
-            Token::OperatorHead(ArithmeticOperandHead::Plus),
-        ];
-        interpreter.run_line(tokens);
+        let _interpreter = run_program("
+            a = 5
+            a +
+        ");
+    }
+
+    #[test]
+    #[should_panic(expected = "0で割ることはできません")]
+    fn test_division_by_zero() {
+        let _interpreter = run_program("
+            a = 10
+            b = 0
+            c = a / b
+        ");
     }
 }
