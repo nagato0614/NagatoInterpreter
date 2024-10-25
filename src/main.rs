@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
-use MyLangExecuter::*;
+use NagatoInterpreter::*;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -34,13 +34,6 @@ fn main() {
             continue;
         }
 
-        // トークンを表示する
-        for token in &tokens {
-            println!("Token : {:?}", token);
-        }
-
         run_line(tokens);
-
-        break;
     }
 }

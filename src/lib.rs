@@ -1,5 +1,8 @@
+use std::collections::HashMap;
 use std::fmt;
-
+use std::env;
+use std::fs::File;
+use std::io::prelude::*;
 // 定数
 const PLUS: &str = "+";
 const MINUS: &str = "-";
@@ -180,7 +183,7 @@ pub fn equation(mut tokens: Vec<Token>) -> i32
     }
 
     let result = arithmetic_equation(tokens);
-
+    println!("Result : {}", result);
     result
 }
 
@@ -267,9 +270,44 @@ pub fn factor(mut token: &Token) -> i32
     }
 }
 
-pub struct NagatoExecuter
+pub struct NagatoInterpreter
 {
-    variables: std::collections::HashMap<String, i32>,
+    variables: HashMap<String, i32>,
+}
+
+fn parse_arguments() -> Option(File)
+{
+    let args: Vec<String> = env::args().collect();
+
+    if args.len() < 2 {
+        eprintln!("Usage: {} <source_file>", args[0]);
+
+        return None
+    }
+
+    let source_file = &args[1];
+
+    if let f = File::open(source_file)
+    {
+
+    }
+
+}
+
+impl NagatoInterpreter
+{
+    pub fn new() -> Self
+    {
+        NagatoInterpreter
+        {
+            variables: HashMap::new()
+        }
+    }
+
+    pub fn run()
+    {
+
+    }
 }
 
 
