@@ -267,6 +267,11 @@ pub fn factor(mut token: &Token) -> i32
     }
 }
 
+pub struct NagatoExecuter
+{
+    variables: std::collections::HashMap<String, i32>,
+}
+
 
 #[cfg(test)]
 mod tests
