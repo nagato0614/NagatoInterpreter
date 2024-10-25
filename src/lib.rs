@@ -3,6 +3,8 @@ use std::fmt;
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
+use regex::Regex;
+
 // 定数
 const PLUS: &str = "+";
 const MINUS: &str = "-";
@@ -10,6 +12,8 @@ const MULTIPLY: &str = "*";
 const DIVIDE: &str = "/";
 const MOD: &str = "%";
 const EQUAL: &str = "=";
+const LEFT_PAREN: &str = "(";
+const RIGHT_PAREN: &str = ")";
 
 #[derive(Debug, Clone)]
 enum ArithmeticOperandTail
@@ -29,12 +33,21 @@ enum ArithmeticOperandHead
 }
 
 #[derive(Debug, Clone)]
+enum ArithmeticOperandParen
+{
+    Left,
+    Right,
+    None,
+}
+
+#[derive(Debug, Clone)]
 enum Token
 {
     Value(i32),
     OperatorHead(ArithmeticOperandHead),
     OperatorTail(ArithmeticOperandTail),
     Variable(String),
+    OperatorParen(ArithmeticOperandParen),
     Assign,
     None,
 }
@@ -57,6 +70,12 @@ impl fmt::Display for Token
                 ArithmeticOperandTail::Multiply => write!(f, "{}", MULTIPLY),
                 ArithmeticOperandTail::Divide => write!(f, "{}", DIVIDE),
                 ArithmeticOperandTail::Mod => write!(f, "{}", MOD),
+                _ => write!(f, "None"),
+            },
+            Token::OperatorParen(op) => match op
+            {
+                ArithmeticOperandParen::Left => write!(f, "{}", LEFT_PAREN),
+                ArithmeticOperandParen::Right => write!(f, "{}", RIGHT_PAREN),
                 _ => write!(f, "None"),
             },
             Token::Variable(var) => write!(f, "{}", var),
@@ -124,17 +143,18 @@ impl Interpreter
         ).collect();
         for line in lines {
             // 1行をトークンに分割する
-            let tokens = self.parse_line(line.as_str());
+            let tokens = &mut self.parse_line(line.as_str());
 
             // 文字列をtoken型の列に変換する
-            let tokens: Vec<Token> = tokens.iter().map(|token| self.convert_token(token)).collect();
+            let mut tokens: Vec<Token> = tokens.iter().map(|token| self.convert_token(token))
+                .collect();
 
             // トークン列が空の場合は次の行へ
             if tokens.len() == 0 {
                 continue;
             }
 
-            self.run_line(tokens);
+            self.run_line(&mut tokens);
         }
     }
 
@@ -153,7 +173,7 @@ impl Interpreter
         for i in 0..len {
             let c = line.chars().nth(i).unwrap();
             match c {
-                '+' | '-' | '*' | '/' | '%' | '=' => {
+                '+' | '-' | '*' | '/' | '%' | '=' | '(' | ')' => {
 
                     // ためていたトークンを追加
                     if token.len() > 0 {
@@ -184,18 +204,35 @@ impl Interpreter
         result
     }
 
-    fn factor(&mut self, token: &Token) -> i32
+    fn factor(&mut self, tokens: &mut Vec<Token>) -> i32
     {
+        let token = tokens.pop().unwrap();
         match token
         {
-            Token::Value(val) => *val,
+            Token::Value(val) => val,
             Token::Variable(var) =>
                 {
-                    if let Some(val) = self.variables.get(var)
+                    if let Some(val) = self.variables.get(var.as_str())
                     {
                         *val
                     } else {
                         panic!("変数がありません : {}", var);
+                    }
+                }
+            Token::OperatorParen(ArithmeticOperandParen::Left) =>
+                {
+                    let result = self.arithmetic_equation(tokens);
+
+                    let next = tokens.pop().unwrap();
+                    match next
+                    {
+                        Token::OperatorParen(ArithmeticOperandParen::Right) => {
+                            result
+                        }
+                        _ =>
+                            {
+                                panic!("括弧が閉じられていません : {}", next);
+                            }
                     }
                 }
             _ =>
@@ -212,8 +249,7 @@ impl Interpreter
             panic!("トークンがありません");
         }
 
-        let first = tokens.pop().unwrap();
-        let mut result = self.factor(&first);
+        let mut result = self.factor(tokens);
         while tokens.len() > 0
         {
             let op = tokens.pop().unwrap();
@@ -221,14 +257,12 @@ impl Interpreter
             {
                 Token::OperatorTail(ArithmeticOperandTail::Multiply) =>
                     {
-                        let second = tokens.pop().unwrap();
-                        let s = self.factor(&second);
+                        let s = self.factor(tokens);
                         result *= s;
                     }
                 Token::OperatorTail(ArithmeticOperandTail::Divide) =>
                     {
-                        let second = tokens.pop().unwrap();
-                        let s = self.factor(&second);
+                        let s = self.factor(tokens);
 
                         if s == 0
                         {
@@ -239,9 +273,20 @@ impl Interpreter
                     }
                 Token::OperatorTail(ArithmeticOperandTail::Mod) =>
                     {
-                        let second = tokens.pop().unwrap();
-                        let s = self.factor(&second);
+                        let s = self.factor(tokens);
                         result %= s;
+                    }
+                // ( の場合は再帰的に計算
+                Token::OperatorParen(ArithmeticOperandParen::Left) =>
+                    {
+                        tokens.push(op);
+                        result *= self.factor(tokens);
+                    }
+                // ) の場合は終了
+                Token::OperatorParen(ArithmeticOperandParen::Right) =>
+                    {
+                        tokens.push(op);
+                        return result;
                     }
                 // +, - の場合は演算子を戻し、終了
                 Token::OperatorHead(_) =>
@@ -258,7 +303,7 @@ impl Interpreter
 
         result
     }
-    fn run_line(&mut self, mut tokens: Vec<Token>)
+    fn run_line(&mut self, mut tokens: &mut Vec<Token>)
     {
         // 変数一つだけの場合はそのまま表示
         if tokens.len() == 1 {
@@ -280,7 +325,7 @@ impl Interpreter
         self.equation(tokens);
     }
 
-    fn equation(&mut self, mut tokens: Vec<Token>) -> i32
+    fn equation(&mut self, tokens: &mut Vec<Token>) -> i32
     {
         let first = tokens.pop().unwrap();
         let second = tokens.pop().unwrap();
@@ -307,7 +352,7 @@ impl Interpreter
         result
     }
 
-    fn arithmetic_equation(&mut self, mut tokens: Vec<Token>) -> i32
+    fn arithmetic_equation(&mut self, mut tokens: &mut Vec<Token>) -> i32
     {
         let mut result = self.term(&mut tokens);
         while tokens.len() > 0
@@ -322,6 +367,16 @@ impl Interpreter
                 Token::OperatorHead(ArithmeticOperandHead::Minus) =>
                     {
                         result -= self.term(&mut tokens);
+                    }
+                Token::OperatorParen(ArithmeticOperandParen::Left) =>
+                    {
+                        tokens.push(op);
+                        result += self.term(&mut tokens);
+                    }
+                Token::OperatorParen(ArithmeticOperandParen::Right) =>
+                    {
+                        tokens.push(op);
+                        return result;
                     }
                 _ =>
                     {
@@ -341,6 +396,8 @@ impl Interpreter
             MULTIPLY => Token::OperatorTail(ArithmeticOperandTail::Multiply),
             DIVIDE => Token::OperatorTail(ArithmeticOperandTail::Divide),
             MOD => Token::OperatorTail(ArithmeticOperandTail::Mod),
+            LEFT_PAREN => Token::OperatorParen(ArithmeticOperandParen::Left),
+            RIGHT_PAREN => Token::OperatorParen(ArithmeticOperandParen::Right),
             EQUAL => Token::Assign,
             _ => {
                 if let Ok(num) = token.parse::<i32>() {
@@ -428,5 +485,37 @@ mod tests {
             b = 0
             c = a / b
         ");
+    }
+
+    #[test]
+    fn test_parentheses_operation() {
+        let interpreter = run_program("
+        a = (1 + 2) * 3
+    ");
+        assert_eq!(interpreter.variables.get("a"), Some(&9));
+    }
+
+    #[test]
+    fn test_nested_parentheses_operation() {
+        let interpreter = run_program("
+        a = ((2 + 3) * (4 - 1)) / 5
+    ");
+        assert_eq!(interpreter.variables.get("a"), Some(&3));
+    }
+
+    #[test]
+    #[should_panic(expected = "括弧が閉じられていません")]
+    fn test_unmatched_left_parenthesis() {
+        let _interpreter = run_program("
+        a = (1 + 2 * 3
+    ");
+    }
+
+    #[test]
+    #[should_panic(expected = "括弧が閉じられていません")]
+    fn test_unmatched_right_parenthesis() {
+        let _interpreter = run_program("
+        a = 1 + 2) * 3
+    ");
     }
 }

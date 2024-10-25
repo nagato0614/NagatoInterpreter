@@ -9,6 +9,8 @@ Rust 勉強のため自作言語用のインタプリタを作成する
     c = a + b
     d = c
     d
+    e = (1 + 1) / 2
+    e
 ```
 
  - 型はすべて32bit int とする.
@@ -28,7 +30,7 @@ Rust 勉強のため自作言語用のインタプリタを作成する
   Equation ::= Variable | ArithmeticEquation
   ArithmeticEquation ::= Term | {ArithmeticOperandHead Term}
   Term ::= Factor | {ArithmeticOperandTail Factor}
-  Factor ::= Value | Variable
+  Factor ::= Value | Variable | '(' ArithmeticEquation ')'
   ArithmeticOperandHead ::= (+|-)
   ArithmeticOperandTail ::= (*|/|%)  
   Variable ::= (a-z)+
