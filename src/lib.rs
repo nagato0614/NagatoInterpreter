@@ -29,29 +29,13 @@ enum ArithmeticOperandHead
 }
 
 #[derive(Debug, Clone)]
-pub enum Token
+ enum Token
 {
     Value(i32),
     OperatorHead(ArithmeticOperandHead),
     OperatorTail(ArithmeticOperandTail),
     Variable(String),
     Assign,
-    None,
-}
-
-#[derive(Debug, Clone)]
-enum Term
-{
-    Factor(i32),
-    Operator(ArithmeticOperandTail),
-    None,
-}
-
-
-enum ArithmeticEquation
-{
-    Term(i32),
-    Operator(ArithmeticOperandHead),
     None,
 }
 
@@ -190,7 +174,7 @@ impl Interpreter
         result
     }
 
-    fn factor(&mut self, mut token: &Token) -> i32
+    fn factor(&mut self, token: &Token) -> i32
     {
         match token
         {
@@ -213,10 +197,14 @@ impl Interpreter
         }
     }
 
-    pub fn term(&mut self, mut tokens: &mut Vec<Token>) -> i32
+     fn term(&mut self, tokens: &mut Vec<Token>) -> i32
     {
-        let first = tokens.pop().unwrap();
+        if tokens.len() == 0
+        {
+            panic!("トークンがありません");
+        }
 
+        let first = tokens.pop().unwrap();
         let mut result = self.factor(&first);
         while tokens.len() > 0
         {
@@ -256,7 +244,7 @@ impl Interpreter
 
         result
     }
-    pub fn run_line(&mut self, mut tokens: Vec<Token>)
+     fn run_line(&mut self, mut tokens: Vec<Token>)
     {
         // 変数一つだけの場合はそのまま表示
         if tokens.len() == 1 {
@@ -278,7 +266,7 @@ impl Interpreter
         self.equation(tokens);
     }
 
-    pub fn equation(&mut self, mut tokens: Vec<Token>) -> i32
+     fn equation(&mut self, mut tokens: Vec<Token>) -> i32
     {
         let first = tokens.pop().unwrap();
         let second = tokens.pop().unwrap();
@@ -307,7 +295,7 @@ impl Interpreter
         result
     }
 
-    pub fn arithmetic_equation(&mut self, mut tokens: Vec<Token>) -> i32
+     fn arithmetic_equation(&mut self, mut tokens: Vec<Token>) -> i32
     {
         let mut result = self.term(&mut tokens);
         while tokens.len() > 0
@@ -333,7 +321,7 @@ impl Interpreter
         result
     }
 
-    pub fn convert_token(&mut self, token: &str) -> Token
+     fn convert_token(&mut self, token: &str) -> Token
     {
         match token {
             PLUS => Token::OperatorHead(ArithmeticOperandHead::Plus),
@@ -355,7 +343,143 @@ impl Interpreter
 
 
 #[cfg(test)]
-mod tests
-{
+mod tests {
     use super::*;
+
+    #[test]
+    fn test_arithmetic_addition() {
+        let mut interpreter = Interpreter::new();
+        let tokens = vec![
+            Token::Variable("a".to_string()),
+            Token::Assign,
+            Token::Value(5),
+        ];
+        interpreter.run_line(tokens);
+
+        let tokens = vec![
+            Token::Variable("b".to_string()),
+            Token::Assign,
+            Token::Value(10),
+        ];
+        interpreter.run_line(tokens);
+
+        let tokens = vec![
+            Token::Variable("c".to_string()),
+            Token::Assign,
+            Token::Variable("a".to_string()),
+            Token::OperatorHead(ArithmeticOperandHead::Plus),
+            Token::Variable("b".to_string()),
+        ];
+        interpreter.run_line(tokens);
+
+        assert_eq!(interpreter.variables.get("c"), Some(&15));
+    }
+
+    #[test]
+    fn test_arithmetic_subtraction() {
+        let mut interpreter = Interpreter::new();
+        let tokens = vec![
+            Token::Variable("x".to_string()),
+            Token::Assign,
+            Token::Value(20),
+        ];
+        interpreter.run_line(tokens);
+
+        let tokens = vec![
+            Token::Variable("y".to_string()),
+            Token::Assign,
+            Token::Value(8),
+        ];
+        interpreter.run_line(tokens);
+
+        let tokens = vec![
+            Token::Variable("z".to_string()),
+            Token::Assign,
+            Token::Variable("x".to_string()),
+            Token::OperatorHead(ArithmeticOperandHead::Minus),
+            Token::Variable("y".to_string()),
+        ];
+        interpreter.run_line(tokens);
+
+        assert_eq!(interpreter.variables.get("z"), Some(&12));
+    }
+
+    #[test]
+    fn test_arithmetic_multiplication() {
+        let mut interpreter = Interpreter::new();
+        let tokens = vec![
+            Token::Variable("m".to_string()),
+            Token::Assign,
+            Token::Value(3),
+        ];
+        interpreter.run_line(tokens);
+
+        let tokens = vec![
+            Token::Variable("n".to_string()),
+            Token::Assign,
+            Token::Value(7),
+        ];
+        interpreter.run_line(tokens);
+
+        let tokens = vec![
+            Token::Variable("p".to_string()),
+            Token::Assign,
+            Token::Variable("m".to_string()),
+            Token::OperatorTail(ArithmeticOperandTail::Multiply),
+            Token::Variable("n".to_string()),
+        ];
+        interpreter.run_line(tokens);
+
+        assert_eq!(interpreter.variables.get("p"), Some(&21));
+    }
+
+    #[test]
+    fn test_arithmetic_division() {
+        let mut interpreter = Interpreter::new();
+        let tokens = vec![
+            Token::Variable("a".to_string()),
+            Token::Assign,
+            Token::Value(20),
+        ];
+        interpreter.run_line(tokens);
+
+        let tokens = vec![
+            Token::Variable("b".to_string()),
+            Token::Assign,
+            Token::Value(4),
+        ];
+        interpreter.run_line(tokens);
+
+        let tokens = vec![
+            Token::Variable("c".to_string()),
+            Token::Assign,
+            Token::Variable("a".to_string()),
+            Token::OperatorTail(ArithmeticOperandTail::Divide),
+            Token::Variable("b".to_string()),
+        ];
+        interpreter.run_line(tokens);
+
+        assert_eq!(interpreter.variables.get("c"), Some(&5));
+    }
+
+    #[test]
+    #[should_panic(expected = "変数がありません")]
+    fn test_variable_not_found() {
+        let mut interpreter = Interpreter::new();
+        let tokens = vec![Token::Variable("undefined".to_string())];
+        interpreter.run_line(tokens);
+    }
+
+    #[test]
+    #[should_panic(expected = "トークンがありません")]
+    fn test_invalid_operator() {
+        let mut interpreter = Interpreter::new();
+        let tokens = vec![
+            Token::Variable("a".to_string()),
+            Token::Assign,
+            Token::Value(5),
+            Token::OperatorHead(ArithmeticOperandHead::Plus),
+        ];
+        interpreter.run_line(tokens);
+    }
 }
