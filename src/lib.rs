@@ -136,6 +136,28 @@ impl Interpreter
         self.run_interpreter();
     }
 
+
+    fn convert_token(&mut self, token: &str) -> Token
+    {
+        match token {
+            PLUS => Token::OperatorHead(ArithmeticOperandHead::Plus),
+            MINUS => Token::OperatorHead(ArithmeticOperandHead::Minus),
+            MULTIPLY => Token::OperatorTail(ArithmeticOperandTail::Multiply),
+            DIVIDE => Token::OperatorTail(ArithmeticOperandTail::Divide),
+            MOD => Token::OperatorTail(ArithmeticOperandTail::Mod),
+            LEFT_PAREN => Token::OperatorParen(ArithmeticOperandParen::Left),
+            RIGHT_PAREN => Token::OperatorParen(ArithmeticOperandParen::Right),
+            EQUAL => Token::Assign,
+            _ => {
+                if let Ok(num) = token.parse::<i32>() {
+                    Token::Value(num)
+                } else {
+                    Token::Variable(token.to_string())
+                }
+            }
+        }
+    }
+
     fn run_interpreter(&mut self)
     {
         let lines: Vec<String> = self.contents.lines().map(
@@ -204,105 +226,6 @@ impl Interpreter
         result
     }
 
-    fn factor(&mut self, tokens: &mut Vec<Token>) -> i32
-    {
-        let token = tokens.pop().unwrap();
-        match token
-        {
-            Token::Value(val) => val,
-            Token::Variable(var) =>
-                {
-                    if let Some(val) = self.variables.get(var.as_str())
-                    {
-                        *val
-                    } else {
-                        panic!("変数がありません : {}", var);
-                    }
-                }
-            Token::OperatorParen(ArithmeticOperandParen::Left) =>
-                {
-                    let result = self.arithmetic_equation(tokens);
-
-                    let next = tokens.pop().unwrap();
-                    match next
-                    {
-                        Token::OperatorParen(ArithmeticOperandParen::Right) => {
-                            result
-                        }
-                        _ =>
-                            {
-                                panic!("括弧が閉じられていません : {}", next);
-                            }
-                    }
-                }
-            _ =>
-                {
-                    panic!("数値でも変数でもありません : {}", token);
-                }
-        }
-    }
-
-    fn term(&mut self, tokens: &mut Vec<Token>) -> i32
-    {
-        if tokens.len() == 0
-        {
-            panic!("トークンがありません");
-        }
-
-        let mut result = self.factor(tokens);
-        while tokens.len() > 0
-        {
-            let op = tokens.pop().unwrap();
-            match op
-            {
-                Token::OperatorTail(ArithmeticOperandTail::Multiply) =>
-                    {
-                        let s = self.factor(tokens);
-                        result *= s;
-                    }
-                Token::OperatorTail(ArithmeticOperandTail::Divide) =>
-                    {
-                        let s = self.factor(tokens);
-
-                        if s == 0
-                        {
-                            panic!("0で割ることはできません");
-                        }
-
-                        result /= s;
-                    }
-                Token::OperatorTail(ArithmeticOperandTail::Mod) =>
-                    {
-                        let s = self.factor(tokens);
-                        result %= s;
-                    }
-                // ( の場合は再帰的に計算
-                Token::OperatorParen(ArithmeticOperandParen::Left) =>
-                    {
-                        tokens.push(op);
-                        result *= self.factor(tokens);
-                    }
-                // ) の場合は終了
-                Token::OperatorParen(ArithmeticOperandParen::Right) =>
-                    {
-                        tokens.push(op);
-                        return result;
-                    }
-                // +, - の場合は演算子を戻し、終了
-                Token::OperatorHead(_) =>
-                    {
-                        tokens.push(op);
-                        break;
-                    }
-                _ =>
-                    {
-                        panic!("演算子がありません : {}", op);
-                    }
-            }
-        }
-
-        result
-    }
     fn run_line(&mut self, mut tokens: &mut Vec<Token>)
     {
         // 変数一つだけの場合はそのまま表示
@@ -388,24 +311,102 @@ impl Interpreter
         result
     }
 
-    fn convert_token(&mut self, token: &str) -> Token
+    fn term(&mut self, tokens: &mut Vec<Token>) -> i32
     {
-        match token {
-            PLUS => Token::OperatorHead(ArithmeticOperandHead::Plus),
-            MINUS => Token::OperatorHead(ArithmeticOperandHead::Minus),
-            MULTIPLY => Token::OperatorTail(ArithmeticOperandTail::Multiply),
-            DIVIDE => Token::OperatorTail(ArithmeticOperandTail::Divide),
-            MOD => Token::OperatorTail(ArithmeticOperandTail::Mod),
-            LEFT_PAREN => Token::OperatorParen(ArithmeticOperandParen::Left),
-            RIGHT_PAREN => Token::OperatorParen(ArithmeticOperandParen::Right),
-            EQUAL => Token::Assign,
-            _ => {
-                if let Ok(num) = token.parse::<i32>() {
-                    Token::Value(num)
-                } else {
-                    Token::Variable(token.to_string())
-                }
+        if tokens.len() == 0
+        {
+            panic!("トークンがありません");
+        }
+
+        let mut result = self.factor(tokens);
+        while tokens.len() > 0
+        {
+            let op = tokens.pop().unwrap();
+            match op
+            {
+                Token::OperatorTail(ArithmeticOperandTail::Multiply) =>
+                    {
+                        let s = self.factor(tokens);
+                        result *= s;
+                    }
+                Token::OperatorTail(ArithmeticOperandTail::Divide) =>
+                    {
+                        let s = self.factor(tokens);
+
+                        if s == 0
+                        {
+                            panic!("0で割ることはできません");
+                        }
+
+                        result /= s;
+                    }
+                Token::OperatorTail(ArithmeticOperandTail::Mod) =>
+                    {
+                        let s = self.factor(tokens);
+                        result %= s;
+                    }
+                // ( の場合は再帰的に計算
+                Token::OperatorParen(ArithmeticOperandParen::Left) =>
+                    {
+                        tokens.push(op);
+                        result *= self.factor(tokens);
+                    }
+                // ) の場合は終了
+                Token::OperatorParen(ArithmeticOperandParen::Right) =>
+                    {
+                        tokens.push(op);
+                        return result;
+                    }
+                // +, - の場合は演算子を戻し、終了
+                Token::OperatorHead(_) =>
+                    {
+                        tokens.push(op);
+                        break;
+                    }
+                _ =>
+                    {
+                        panic!("演算子がありません : {}", op);
+                    }
             }
+        }
+
+        result
+    }
+    fn factor(&mut self, tokens: &mut Vec<Token>) -> i32
+    {
+        let token = tokens.pop().unwrap();
+        match token
+        {
+            Token::Value(val) => val,
+            Token::Variable(var) =>
+                {
+                    if let Some(val) = self.variables.get(var.as_str())
+                    {
+                        *val
+                    } else {
+                        panic!("変数がありません : {}", var);
+                    }
+                }
+            Token::OperatorParen(ArithmeticOperandParen::Left) =>
+                {
+                    let result = self.arithmetic_equation(tokens);
+
+                    let next = tokens.pop().unwrap();
+                    match next
+                    {
+                        Token::OperatorParen(ArithmeticOperandParen::Right) => {
+                            result
+                        }
+                        _ =>
+                            {
+                                panic!("括弧が閉じられていません : {}", next);
+                            }
+                    }
+                }
+            _ =>
+                {
+                    panic!("数値でも変数でもありません : {}", token);
+                }
         }
     }
 }
