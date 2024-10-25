@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
@@ -18,7 +19,28 @@ fn main() {
     let mut contents = String::new();
     f.read_to_string(&mut contents).expect("Failed to read file");
 
-    // 1行読み込む
-    let mut line = contents.lines().next().unwrap();
-    println!("Line: {}", line);
+
+    for line in contents.lines() {
+        println!("Line: {}", line);
+
+        // 1行をトークンに分割する
+        let tokens = parse_line(line);
+
+        // 文字列をtoken型の列に変換する
+        let tokens: Vec<Token> = tokens.iter().map(|token| convert_token(token)).collect();
+
+        // トークン列が空の場合は次の行へ
+        if tokens.len() == 0 {
+            continue;
+        }
+
+        // トークンを表示する
+        for token in &tokens {
+            println!("Token : {:?}", token);
+        }
+
+        run_line(tokens);
+
+        break;
+    }
 }
