@@ -15,6 +15,7 @@ const EQUAL: &str = "=";
 const LEFT_PAREN: &str = "(";
 const RIGHT_PAREN: &str = ")";
 const COMPARISON: &str = "==";
+const NOT_EQUAL: &str = "!=";
 const GREATER_THAN: &str = ">";
 const LESS_THAN: &str = "<";
 const GREATER_THAN_OR_EQUAL: &str = ">=";
@@ -28,7 +29,25 @@ enum ComparisonOperand
     LessThan,
     GreaterThanOrEqual,
     LessThanOrEqual,
+    NotEqual,
     None,
+}
+
+impl fmt::Display for ComparisonOperand
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+    {
+        match self
+        {
+            ComparisonOperand::Equal => write!(f, "{}", COMPARISON),
+            ComparisonOperand::GreaterThan => write!(f, "{}", GREATER_THAN),
+            ComparisonOperand::LessThan => write!(f, "{}", LESS_THAN),
+            ComparisonOperand::GreaterThanOrEqual => write!(f, "{}", GREATER_THAN_OR_EQUAL),
+            ComparisonOperand::LessThanOrEqual => write!(f, "{}", LESS_THAN_OR_EQUAL),
+            ComparisonOperand::NotEqual => write!(f, "{}", NOT_EQUAL),
+            _ => write!(f, "None"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -162,28 +181,6 @@ impl Interpreter
         self.run_interpreter();
     }
 
-
-    fn convert_token(&mut self, token: &str) -> Token
-    {
-        match token {
-            PLUS => Token::OperatorHead(ArithmeticOperandHead::Plus),
-            MINUS => Token::OperatorHead(ArithmeticOperandHead::Minus),
-            MULTIPLY => Token::OperatorTail(ArithmeticOperandTail::Multiply),
-            DIVIDE => Token::OperatorTail(ArithmeticOperandTail::Divide),
-            MOD => Token::OperatorTail(ArithmeticOperandTail::Mod),
-            LEFT_PAREN => Token::OperatorParen(ArithmeticOperandParen::Left),
-            RIGHT_PAREN => Token::OperatorParen(ArithmeticOperandParen::Right),
-            EQUAL => Token::Assign,
-            _ => {
-                if let Ok(num) = token.parse::<i32>() {
-                    Token::Value(num)
-                } else {
-                    Token::Variable(token.to_string())
-                }
-            }
-        }
-    }
-
     fn run_interpreter(&mut self)
     {
         let lines: Vec<String> = self.contents.lines().map(
@@ -202,7 +199,56 @@ impl Interpreter
                 continue;
             }
 
+            // 括弧の数が正しいか確認
+            if !self.check_parentheses(line.as_str()) {
+                panic!("括弧の数が正しくありません : {}", line);
+            }
+
             self.run_line(&mut tokens);
+        }
+    }
+
+    fn check_parentheses(&self, line: &str) -> bool
+    {
+        let re = Regex::new(r"\(|\)").unwrap();
+        let mut count = 0;
+        for c in re.captures_iter(line) {
+            match c.get(0).unwrap().as_str() {
+                "(" => count += 1,
+                ")" => count -= 1,
+                _ => {}
+            }
+            if count < 0 {
+                return false;
+            }
+        }
+        count == 0
+    }
+
+    fn convert_token(&mut self, token: &str) -> Token
+    {
+        match token {
+            PLUS => Token::OperatorHead(ArithmeticOperandHead::Plus),
+            MINUS => Token::OperatorHead(ArithmeticOperandHead::Minus),
+            MULTIPLY => Token::OperatorTail(ArithmeticOperandTail::Multiply),
+            DIVIDE => Token::OperatorTail(ArithmeticOperandTail::Divide),
+            MOD => Token::OperatorTail(ArithmeticOperandTail::Mod),
+            LEFT_PAREN => Token::OperatorParen(ArithmeticOperandParen::Left),
+            RIGHT_PAREN => Token::OperatorParen(ArithmeticOperandParen::Right),
+            EQUAL => Token::Assign,
+            COMPARISON => Token::OperatorComparison(ComparisonOperand::Equal),
+            GREATER_THAN => Token::OperatorComparison(ComparisonOperand::GreaterThan),
+            LESS_THAN => Token::OperatorComparison(ComparisonOperand::LessThan),
+            GREATER_THAN_OR_EQUAL => Token::OperatorComparison(ComparisonOperand::GreaterThanOrEqual),
+            LESS_THAN_OR_EQUAL => Token::OperatorComparison(ComparisonOperand::LessThanOrEqual),
+            NOT_EQUAL => Token::OperatorComparison(ComparisonOperand::NotEqual),
+            _ => {
+                if let Ok(num) = token.parse::<i32>() {
+                    Token::Value(num)
+                } else {
+                    Token::Variable(token.to_string())
+                }
+            }
         }
     }
 
@@ -233,7 +279,7 @@ impl Interpreter
                     // 演算子を追加
                     result.push(c.to_string());
                 }
-                '>' | '<' | '=' =>
+                '>' | '<' | '=' | '!' =>
                     {
                         // もう一つ次の文字を取得
                         let next = line.chars().nth(i + 1).unwrap();
@@ -317,6 +363,55 @@ impl Interpreter
 
         let result = self.arithmetic_equation(tokens);
 
+        // 比較演算子が残っている場合
+        if let Some(Token::OperatorComparison(op)) = tokens.pop()
+        {
+            let mut comparison = false;
+            let left = result;
+            let right = self.arithmetic_equation(tokens);
+
+            match op
+            {
+                ComparisonOperand::Equal =>
+                    {
+                        comparison = left == right;
+                    }
+                ComparisonOperand::GreaterThan =>
+                    {
+                        comparison = left > right;
+                    }
+                ComparisonOperand::LessThan =>
+                    {
+                        comparison = left < right;
+                    }
+                ComparisonOperand::GreaterThanOrEqual =>
+                    {
+                        comparison = left >= right;
+                    }
+                ComparisonOperand::LessThanOrEqual =>
+                    {
+                        comparison = left <= right;
+                    }
+                ComparisonOperand::NotEqual =>
+                    {
+                        comparison = left != right;
+                    }
+                _ =>
+                    {
+                        panic!("比較演算子がありません : {}", op);
+                    }
+            }
+
+            if let Token::Variable(var) = first
+            {
+                self.variables.insert(var, comparison as i32);
+            } else {
+                panic!("変数がありません : {}", first);
+            }
+
+            return comparison as i32;
+        }
+
         if let Token::Variable(var) = first
         {
             self.variables.insert(var, result);
@@ -326,7 +421,6 @@ impl Interpreter
 
         result
     }
-
 
     fn arithmetic_equation(&mut self, mut tokens: &mut Vec<Token>) -> i32
     {
@@ -352,7 +446,13 @@ impl Interpreter
                 Token::OperatorParen(ArithmeticOperandParen::Right) =>
                     {
                         tokens.push(op);
-                        return result;
+                        break;
+                    }
+                // 比較演算子の場合は演算子を戻し、終了
+                Token::OperatorComparison(_) =>
+                    {
+                        tokens.push(op);
+                        break;
                     }
                 _ =>
                     {
@@ -416,6 +516,12 @@ impl Interpreter
                         tokens.push(op);
                         break;
                     }
+                // 比較演算子
+                Token::OperatorComparison(_) =>
+                    {
+                        tokens.push(op);
+                        break;
+                    }
                 _ =>
                     {
                         panic!("演算子がありません : {}", op);
@@ -443,18 +549,25 @@ impl Interpreter
             Token::OperatorParen(ArithmeticOperandParen::Left) =>
                 {
                     let result = self.arithmetic_equation(tokens);
-
-                    let next = tokens.pop().unwrap();
-                    match next
+                    if let Some(T) = tokens.pop() // get next token
                     {
-                        Token::OperatorParen(ArithmeticOperandParen::Right) => {
-                            result
-                        }
-                        _ =>
-                            {
-                                panic!("括弧が閉じられていません : {}", next);
+                        match T
+                        {
+                            Token::OperatorParen(ArithmeticOperandParen::Right) => {
+                                result
                             }
+                            _ =>
+                                {
+                                    panic!("括弧が閉じられていません : {}", T);
+                                }
+                        }
+                    } else {
+                        panic!("括弧が閉じられていません : {}", token);
                     }
+                }
+            Token::OperatorParen(ArithmeticOperandParen::Right) =>
+                {
+                    panic!("括弧が閉じられていません : {}", token);
                 }
             _ =>
                 {
@@ -497,6 +610,129 @@ mod tests {
 
         let tokens = parse_line("e = 4 > 5");
         assert_eq!(tokens, vec!["e", "=", "4", ">", "5"]);
+
+        let tokens = parse_line("f = 5 != 6");
+        assert_eq!(tokens, vec!["f", "=", "5", "!=", "6"]);
+    }
+
+    #[test]
+    fn test_comparison_equal_true() {
+        let interpreter = run_program("
+            a = 5
+            b = 5
+            c = a == b
+        ");
+        assert_eq!(interpreter.variables.get("c"), Some(&1));
+    }
+
+    #[test]
+    fn test_comparison_equal_false() {
+        let interpreter = run_program("
+            a = 5
+            b = 10
+            c = a == b
+        ");
+        assert_eq!(interpreter.variables.get("c"), Some(&0));
+    }
+
+    #[test]
+    fn test_comparison_not_equal_true() {
+        let interpreter = run_program("
+            a = 5
+            b = 10
+            c = a != b
+        ");
+        assert_eq!(interpreter.variables.get("c"), Some(&1));
+    }
+
+    #[test]
+    fn test_comparison_not_equal_false() {
+        let interpreter = run_program("
+            a = 5
+            b = 5
+            c = a != b
+        ");
+        assert_eq!(interpreter.variables.get("c"), Some(&0));
+    }
+
+    #[test]
+    fn test_comparison_greater_than_true() {
+        let interpreter = run_program("
+            a = 10
+            b = 5
+            c = a > b
+        ");
+        assert_eq!(interpreter.variables.get("c"), Some(&1));
+    }
+
+    #[test]
+    fn test_comparison_greater_than_false() {
+        let interpreter = run_program("
+            a = 5
+            b = 10
+            c = a > b
+        ");
+        assert_eq!(interpreter.variables.get("c"), Some(&0));
+    }
+
+    #[test]
+    fn test_comparison_less_than_true() {
+        let interpreter = run_program("
+            a = 5
+            b = 10
+            c = a < b
+        ");
+        assert_eq!(interpreter.variables.get("c"), Some(&1));
+    }
+
+    #[test]
+    fn test_comparison_less_than_false() {
+        let interpreter = run_program("
+            a = 10
+            b = 5
+            c = a < b
+        ");
+        assert_eq!(interpreter.variables.get("c"), Some(&0));
+    }
+
+    #[test]
+    fn test_comparison_greater_than_or_equal_true() {
+        let interpreter = run_program("
+            a = 10
+            b = 5
+            c = a >= b
+        ");
+        assert_eq!(interpreter.variables.get("c"), Some(&1));
+    }
+
+    #[test]
+    fn test_comparison_greater_than_or_equal_false() {
+        let interpreter = run_program("
+            a = 5
+            b = 10
+            c = a >= b
+        ");
+        assert_eq!(interpreter.variables.get("c"), Some(&0));
+    }
+
+    #[test]
+    fn test_comparison_less_than_or_equal_true() {
+        let interpreter = run_program("
+            a = 5
+            b = 10
+            c = a <= b
+        ");
+        assert_eq!(interpreter.variables.get("c"), Some(&1));
+    }
+
+    #[test]
+    fn test_comparison_less_than_or_equal_false() {
+        let interpreter = run_program("
+            a = 10
+            b = 5
+            c = a <= b
+        ");
+        assert_eq!(interpreter.variables.get("c"), Some(&0));
     }
 
     #[test]
@@ -540,7 +776,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "変数がありません")]
+    #[should_panic(expected = "変数がありません : undefined")]
     fn test_variable_not_found() {
         let _interpreter = run_program("undefined");
     }
@@ -581,18 +817,39 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "括弧が閉じられていません")]
+    #[should_panic(expected = "括弧の数が正しくありません : a = (1 + 2 * 3")]
     fn test_unmatched_left_parenthesis() {
-        let _interpreter = run_program("
-        a = (1 + 2 * 3
-    ");
+        let _interpreter = run_program("a = (1 + 2 * 3");
     }
 
     #[test]
-    #[should_panic(expected = "括弧が閉じられていません")]
+    #[should_panic(expected = "括弧の数が正しくありません : a = 1 + 2) * 3")]
     fn test_unmatched_right_parenthesis() {
-        let _interpreter = run_program("
-        a = 1 + 2) * 3
-    ");
+        let _interpreter = run_program("a = 1 + 2) * 3");
+    }
+
+    #[test]
+    fn test_complex_operations() {
+        let interpreter = run_program("
+            a = 5
+            b = 10
+            c = (a + b) * 2
+            d = c / 5
+            e = d - 3
+            f = e % 2
+            g = f == 0
+            h = (a * b) > (c / 2)
+            i = (a + b) <= (c - d)
+        ");
+
+        assert_eq!(interpreter.variables.get("a"), Some(&5));
+        assert_eq!(interpreter.variables.get("b"), Some(&10));
+        assert_eq!(interpreter.variables.get("c"), Some(&30));
+        assert_eq!(interpreter.variables.get("d"), Some(&6));
+        assert_eq!(interpreter.variables.get("e"), Some(&3));
+        assert_eq!(interpreter.variables.get("f"), Some(&1));
+        assert_eq!(interpreter.variables.get("g"), Some(&0));
+        assert_eq!(interpreter.variables.get("h"), Some(&1));
+        assert_eq!(interpreter.variables.get("i"), Some(&1));
     }
 }
