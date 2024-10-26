@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::env;
+use std::fmt::Display;
 use std::fs::File;
 use std::io::prelude::*;
 use regex::Regex;
@@ -33,7 +34,7 @@ enum ComparisonOperand
     None,
 }
 
-impl fmt::Display for ComparisonOperand
+impl Display for ComparisonOperand
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
     {
@@ -78,7 +79,7 @@ enum ArithmeticOperandParen
 #[derive(Debug, Clone)]
 enum Token
 {
-    Value(i32),
+    Value(Value),
     OperatorHead(ArithmeticOperandHead),
     OperatorTail(ArithmeticOperandTail),
     Variable(String),
@@ -88,7 +89,7 @@ enum Token
     None,
 }
 
-impl fmt::Display for Token
+impl Display for Token
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
     {
@@ -130,10 +131,31 @@ impl fmt::Display for Token
     }
 }
 
+#[derive(Debug, Clone)]
+#[derive(PartialEq)]
+enum Value
+{
+    Int(i32),
+    Float(f32),
+    Bool(bool),
+}
+
+impl Display for Value
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+    {
+        match self
+        {
+            Value::Int(val) => write!(f, "{}", val),
+            Value::Float(val) => write!(f, "{}", val),
+            Value::Bool(val) => write!(f, "{}", val),
+        }
+    }
+}
 
 pub struct Interpreter
 {
-    variables: HashMap<String, i32>,
+    variables: HashMap<String, Value>,
     contents: String,
 }
 
@@ -243,8 +265,11 @@ impl Interpreter
             LESS_THAN_OR_EQUAL => Token::OperatorComparison(ComparisonOperand::LessThanOrEqual),
             NOT_EQUAL => Token::OperatorComparison(ComparisonOperand::NotEqual),
             _ => {
+                // 整数か浮動小数点数か判定
                 if let Ok(num) = token.parse::<i32>() {
-                    Token::Value(num)
+                    Token::Value(Value::Int(num))
+                } else if let Ok(num) = token.parse::<f32>() {
+                    Token::Value(Value::Float(num))
                 } else {
                     Token::Variable(token.to_string())
                 }
@@ -303,6 +328,10 @@ impl Interpreter
                         // 次の文字をスキップ
                         i += 1;
                     }
+                '#' => {
+                    // コメントの場合はそれ以降の文字を無視
+                    break;
+                }
                 ' ' => {
                     // ためていたトークンを追加
                     if token.len() > 0 {
@@ -346,7 +375,7 @@ impl Interpreter
         self.equation(tokens);
     }
 
-    fn equation(&mut self, tokens: &mut Vec<Token>) -> i32
+    fn equation(&mut self, tokens: &mut Vec<Token>)
     {
         let first = tokens.pop().unwrap();
         let second = tokens.pop().unwrap();
@@ -361,40 +390,82 @@ impl Interpreter
                 }
         }
 
-        let result = self.arithmetic_equation(tokens);
+        let mut result = self.arithmetic_equation(tokens);
 
         // 比較演算子が残っている場合
         if let Some(Token::OperatorComparison(op)) = tokens.pop()
         {
             let mut comparison = false;
-            let left = result;
+            let left = result.clone();
             let right = self.arithmetic_equation(tokens);
 
             match op
             {
                 ComparisonOperand::Equal =>
                     {
-                        comparison = left == right;
+                        match (left, right)
+                        {
+                            (Value::Int(a), Value::Int(b)) => comparison = a == b,
+                            (Value::Int(a), Value::Float(b)) => comparison = a as f32 == b,
+                            (Value::Float(a), Value::Int(b)) => comparison = a == b as f32,
+                            (Value::Float(a), Value::Float(b)) => comparison = a == b,
+                            _ => panic!("数値型または浮動小数点以外の比較はできません"),
+                        }
                     }
                 ComparisonOperand::GreaterThan =>
                     {
-                        comparison = left > right;
+                        match (left, right)
+                        {
+                            (Value::Int(a), Value::Int(b)) => comparison = a > b,
+                            (Value::Int(a), Value::Float(b)) => comparison = a as f32 > b,
+                            (Value::Float(a), Value::Int(b)) => comparison = a > b as f32,
+                            (Value::Float(a), Value::Float(b)) => comparison = a > b,
+                            _ => panic!("数値型または浮動小数点以外の比較はできません"),
+                        }
                     }
                 ComparisonOperand::LessThan =>
                     {
-                        comparison = left < right;
+                        match (left, right)
+                        {
+                            (Value::Int(a), Value::Int(b)) => comparison = a < b,
+                            (Value::Int(a), Value::Float(b)) => comparison = (a as f32) < b,
+                            (Value::Float(a), Value::Int(b)) => comparison = a < (b as f32),
+                            (Value::Float(a), Value::Float(b)) => comparison = a < b,
+                            _ => panic!("数値型または浮動小数点以外の比較はできません"),
+                        }
                     }
                 ComparisonOperand::GreaterThanOrEqual =>
                     {
-                        comparison = left >= right;
+                        match (left, right)
+                        {
+                            (Value::Int(a), Value::Int(b)) => comparison = a >= b,
+                            (Value::Int(a), Value::Float(b)) => comparison = a as f32 >= b,
+                            (Value::Float(a), Value::Int(b)) => comparison = a >= b as f32,
+                            (Value::Float(a), Value::Float(b)) => comparison = a >= b,
+                            _ => panic!("数値型または浮動小数点以外の比較はできません"),
+                        }
                     }
                 ComparisonOperand::LessThanOrEqual =>
                     {
-                        comparison = left <= right;
+                        match (left, right)
+                        {
+                            (Value::Int(a), Value::Int(b)) => comparison = a <= b,
+                            (Value::Int(a), Value::Float(b)) => comparison = a as f32 <= b,
+                            (Value::Float(a), Value::Int(b)) => comparison = a <= b as f32,
+                            (Value::Float(a), Value::Float(b)) => comparison = a <= b,
+                            _ => panic!("数値型または浮動小数点以外の比較はできません"),
+                        }
                     }
                 ComparisonOperand::NotEqual =>
                     {
-                        comparison = left != right;
+                        match (left, right)
+                        {
+                            (Value::Int(a), Value::Int(b)) => comparison = a != b,
+                            (Value::Int(a), Value::Float(b)) => comparison = a as f32 != b,
+                            (Value::Float(a), Value::Int(b)) => comparison = a != b as f32,
+                            (Value::Float(a), Value::Float(b)) => comparison = a != b,
+                            _ => panic!("数値型または浮動小数点以外の比較はできません"),
+                        }
                     }
                 _ =>
                     {
@@ -402,14 +473,12 @@ impl Interpreter
                     }
             }
 
-            if let Token::Variable(var) = first
+            if let Token::Variable(var) = first.clone()
             {
-                self.variables.insert(var, comparison as i32);
+                result = Value::Int(comparison as i32);
             } else {
                 panic!("変数がありません : {}", first);
             }
-
-            return comparison as i32;
         }
 
         if let Token::Variable(var) = first
@@ -418,11 +487,9 @@ impl Interpreter
         } else {
             panic!("変数がありません : {}", first);
         }
-
-        result
     }
 
-    fn arithmetic_equation(&mut self, mut tokens: &mut Vec<Token>) -> i32
+    fn arithmetic_equation(&mut self, mut tokens: &mut Vec<Token>) -> Value
     {
         let mut result = self.term(&mut tokens);
         while tokens.len() > 0
@@ -432,16 +499,38 @@ impl Interpreter
             {
                 Token::OperatorHead(ArithmeticOperandHead::Plus) =>
                     {
-                        result += self.term(&mut tokens);
+                        let term_result = self.term(&mut tokens);
+                        match (result, term_result)
+                        {
+                            (Value::Int(a), Value::Int(b)) => result = Value::Int(a + b),
+                            (Value::Int(a), Value::Float(b)) => result = Value::Float(a as f32 + b),
+                            (Value::Float(a), Value::Int(b)) => result = Value::Float(a + b as f32),
+                            (Value::Float(a), Value::Float(b)) => result = Value::Float(a + b),
+                            _ => panic!("数値型または浮動小数点以外の演算はできません"),
+                        }
                     }
                 Token::OperatorHead(ArithmeticOperandHead::Minus) =>
                     {
-                        result -= self.term(&mut tokens);
+                        let term_result = self.term(&mut tokens);
+                        match (result, term_result)
+                        {
+                            (Value::Int(a), Value::Int(b)) => result = Value::Int(a - b),
+                            (Value::Int(a), Value::Float(b)) => result = Value::Float(a as f32 - b),
+                            (Value::Float(a), Value::Int(b)) => result = Value::Float(a - b as f32),
+                            (Value::Float(a), Value::Float(b)) => result = Value::Float(a - b),
+                            _ => panic!("数値型または浮動小数点以外の演算はできません"),
+                        }
                     }
                 Token::OperatorParen(ArithmeticOperandParen::Left) =>
                     {
                         tokens.push(op);
-                        result += self.term(&mut tokens);
+                        let term_result = self.term(&mut tokens);
+                        match term_result
+                        {
+                            Value::Int(a) => result = Value::Int(a),
+                            Value::Float(a) => result = Value::Float(a),
+                            _ => panic!("数値型または浮動小数点以外の演算はできません"),
+                        }
                     }
                 Token::OperatorParen(ArithmeticOperandParen::Right) =>
                     {
@@ -464,7 +553,7 @@ impl Interpreter
         result
     }
 
-    fn term(&mut self, tokens: &mut Vec<Token>) -> i32
+    fn term(&mut self, tokens: &mut Vec<Token>) -> Value
     {
         if tokens.len() == 0
         {
@@ -480,29 +569,75 @@ impl Interpreter
                 Token::OperatorTail(ArithmeticOperandTail::Multiply) =>
                     {
                         let s = self.factor(tokens);
-                        result *= s;
+                        match (result, s)
+                        {
+                            (Value::Int(a), Value::Int(b)) => result = Value::Int(a * b),
+                            (Value::Int(a), Value::Float(b)) => result = Value::Float(a as f32 * b),
+                            (Value::Float(a), Value::Int(b)) => result = Value::Float(a * b as f32),
+                            (Value::Float(a), Value::Float(b)) => result = Value::Float(a * b),
+                            _ => panic!("数値型または浮動小数点以外の演算はできません"),
+                        }
                     }
                 Token::OperatorTail(ArithmeticOperandTail::Divide) =>
                     {
                         let s = self.factor(tokens);
 
-                        if s == 0
+                        match (result, s)
                         {
-                            panic!("0で割ることはできません");
+                            (Value::Int(a), Value::Int(b)) => {
+                                if b == 0 {
+                                    panic!("0で割ることはできません");
+                                }
+                                result = Value::Int(a / b);
+                            }
+                            (Value::Int(a), Value::Float(b)) => {
+                                if b == 0.0 {
+                                    panic!("0で割ることはできません");
+                                }
+                                result = Value::Float(a as f32 / b);
+                            }
+                            (Value::Float(a), Value::Int(b)) => {
+                                if b == 0 {
+                                    panic!("0で割ることはできません");
+                                }
+                                result = Value::Float(a / b as f32);
+                            }
+                            (Value::Float(a), Value::Float(b)) => {
+                                if b == 0.0 {
+                                    panic!("0で割ることはできません");
+                                }
+                                result = Value::Float(a / b);
+                            }
+                            _ => panic!("数値型または浮動小数点以外の演算はできません"),
                         }
-
-                        result /= s;
                     }
                 Token::OperatorTail(ArithmeticOperandTail::Mod) =>
                     {
                         let s = self.factor(tokens);
-                        result %= s;
+
+                        match (result, s)
+                        {
+                            (Value::Int(a), Value::Int(b)) => {
+                                if b == 0 {
+                                    panic!("0で割ることはできません");
+                                }
+                                result = Value::Int(a % b);
+                            }
+                            _ => panic!("整数型以外の演算はできません"),
+                        }
                     }
                 // ( の場合は再帰的に計算
                 Token::OperatorParen(ArithmeticOperandParen::Left) =>
                     {
                         tokens.push(op);
-                        result *= self.factor(tokens);
+                        let factor_result = self.factor(tokens);
+
+                        match factor_result
+                        {
+                            Value::Int(a) => result = Value::Int(a),
+                            Value::Float(a) => result = Value::Float(a),
+                            _ => panic!("数値型または浮動小数点以外の演算はできません"),
+                        }
                     }
                 // ) の場合は終了
                 Token::OperatorParen(ArithmeticOperandParen::Right) =>
@@ -531,7 +666,7 @@ impl Interpreter
 
         result
     }
-    fn factor(&mut self, tokens: &mut Vec<Token>) -> i32
+    fn factor(&mut self, tokens: &mut Vec<Token>) -> Value
     {
         let token = tokens.pop().unwrap();
         match token
@@ -541,7 +676,7 @@ impl Interpreter
                 {
                     if let Some(val) = self.variables.get(var.as_str())
                     {
-                        *val
+                        val.clone()
                     } else {
                         panic!("変数がありません : {}", var);
                     }
@@ -613,6 +748,9 @@ mod tests {
 
         let tokens = parse_line("f = 5 != 6");
         assert_eq!(tokens, vec!["f", "=", "5", "!=", "6"]);
+
+        let tokens = parse_line("g = 5.5 == 5.5");
+        assert_eq!(tokens, vec!["g", "=", "5.5", "==", "5.5"]);
     }
 
     #[test]
@@ -622,7 +760,15 @@ mod tests {
             b = 5
             c = a == b
         ");
-        assert_eq!(interpreter.variables.get("c"), Some(&1));
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(1));
+
+        // 浮動小数点数の比較
+        let interpreter = run_program("
+            a = 5.5
+            b = 5.5
+            c = a == b
+        ");
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(1));
     }
 
     #[test]
@@ -632,7 +778,15 @@ mod tests {
             b = 10
             c = a == b
         ");
-        assert_eq!(interpreter.variables.get("c"), Some(&0));
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
+
+        // 浮動小数点数の比較
+        let interpreter = run_program("
+            a = 5.5
+            b = 5.6
+            c = a == b
+        ");
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
     }
 
     #[test]
@@ -642,7 +796,14 @@ mod tests {
             b = 10
             c = a != b
         ");
-        assert_eq!(interpreter.variables.get("c"), Some(&1));
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(1));
+
+        // 浮動小数点数の比較
+        let interpreter = run_program("
+            a = 5.5
+            b = 5.6
+            c = a != b
+        ");
     }
 
     #[test]
@@ -652,7 +813,15 @@ mod tests {
             b = 5
             c = a != b
         ");
-        assert_eq!(interpreter.variables.get("c"), Some(&0));
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
+
+        // 浮動小数点数の比較
+        let interpreter = run_program("
+            a = 5.5
+            b = 5.5
+            c = a != b
+        ");
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
     }
 
     #[test]
@@ -662,7 +831,15 @@ mod tests {
             b = 5
             c = a > b
         ");
-        assert_eq!(interpreter.variables.get("c"), Some(&1));
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(1));
+
+        // 浮動小数点数の比較
+        let interpreter = run_program("
+            a = 10.5
+            b = 5.5
+            c = a > b
+        ");
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(1));
     }
 
     #[test]
@@ -672,7 +849,15 @@ mod tests {
             b = 10
             c = a > b
         ");
-        assert_eq!(interpreter.variables.get("c"), Some(&0));
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
+
+        // 浮動小数点数の比較
+        let interpreter = run_program("
+            a = 5.5
+            b = 10.5
+            c = a > b
+        ");
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
     }
 
     #[test]
@@ -682,7 +867,15 @@ mod tests {
             b = 10
             c = a < b
         ");
-        assert_eq!(interpreter.variables.get("c"), Some(&1));
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(1));
+
+        // 浮動小数点数の比較
+        let interpreter = run_program("
+            a = 5.5
+            b = 10.5
+            c = a < b
+        ");
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(1));
     }
 
     #[test]
@@ -692,7 +885,15 @@ mod tests {
             b = 5
             c = a < b
         ");
-        assert_eq!(interpreter.variables.get("c"), Some(&0));
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
+
+        // 浮動小数点数の比較
+        let interpreter = run_program("
+            a = 10.5
+            b = 5.5
+            c = a < b
+        ");
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
     }
 
     #[test]
@@ -702,7 +903,15 @@ mod tests {
             b = 5
             c = a >= b
         ");
-        assert_eq!(interpreter.variables.get("c"), Some(&1));
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(1));
+
+        // 浮動小数点数の比較
+        let interpreter = run_program("
+            a = 10.5
+            b = 5.5
+            c = a >= b
+        ");
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(1));
     }
 
     #[test]
@@ -712,7 +921,15 @@ mod tests {
             b = 10
             c = a >= b
         ");
-        assert_eq!(interpreter.variables.get("c"), Some(&0));
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
+
+        // 浮動小数点数の比較
+        let interpreter = run_program("
+            a = 5.5
+            b = 10.5
+            c = a >= b
+        ");
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
     }
 
     #[test]
@@ -722,7 +939,14 @@ mod tests {
             b = 10
             c = a <= b
         ");
-        assert_eq!(interpreter.variables.get("c"), Some(&1));
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(1));
+
+        // 浮動小数点数の比較
+        let interpreter = run_program("
+            a = 5.5
+            b = 10.5
+            c = a <= b
+        ");
     }
 
     #[test]
@@ -732,7 +956,15 @@ mod tests {
             b = 5
             c = a <= b
         ");
-        assert_eq!(interpreter.variables.get("c"), Some(&0));
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
+
+        // 浮動小数点数の比較
+        let interpreter = run_program("
+            a = 10.5
+            b = 5.5
+            c = a <= b
+        ");
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
     }
 
     #[test]
@@ -742,7 +974,15 @@ mod tests {
             b = 10
             c = a + b
         ");
-        assert_eq!(interpreter.variables.get("c"), Some(&15));
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(15));
+
+        // 浮動小数点数の加算
+        let interpreter = run_program("
+            x = 5.5
+            y = 10.5
+            z = x + y
+        ");
+        assert_eq!(interpreter.variables.get("z").unwrap(), &Value::Float(16.0));
     }
 
     #[test]
@@ -752,7 +992,15 @@ mod tests {
             y = 8
             z = x - y
         ");
-        assert_eq!(interpreter.variables.get("z"), Some(&12));
+        assert_eq!(interpreter.variables.get("z").unwrap(), &Value::Int(12));
+
+        // 浮動小数点数の減算
+        let interpreter = run_program("
+            x = 20.5
+            y = 8.5
+            z = x - y
+        ");
+        assert_eq!(interpreter.variables.get("z").unwrap(), &Value::Float(12.0));
     }
 
     #[test]
@@ -762,7 +1010,15 @@ mod tests {
             n = 7
             p = m * n
         ");
-        assert_eq!(interpreter.variables.get("p"), Some(&21));
+        assert_eq!(interpreter.variables.get("p").unwrap(), &Value::Int(21));
+
+        // 浮動小数点数の乗算
+        let interpreter = run_program("
+            m = 3.5
+            n = 7.5
+            p = m * n
+        ");
+        assert_eq!(interpreter.variables.get("p").unwrap(), &Value::Float(26.25));
     }
 
     #[test]
@@ -772,7 +1028,15 @@ mod tests {
             b = 4
             c = a / b
         ");
-        assert_eq!(interpreter.variables.get("c"), Some(&5));
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(5));
+
+        // 浮動小数点数の除算
+        let interpreter = run_program("
+            a = 20.5
+            b = 4.5
+            c = a / b
+        ");
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Float(4.5555553));
     }
 
     #[test]
@@ -805,7 +1069,7 @@ mod tests {
         let interpreter = run_program("
         a = (1 + 2) * 3
     ");
-        assert_eq!(interpreter.variables.get("a"), Some(&9));
+        assert_eq!(interpreter.variables.get("a").unwrap(), &Value::Int(9));
     }
 
     #[test]
@@ -813,7 +1077,7 @@ mod tests {
         let interpreter = run_program("
         a = ((2 + 3) * (4 - 1)) / 5
     ");
-        assert_eq!(interpreter.variables.get("a"), Some(&3));
+        assert_eq!(interpreter.variables.get("a").unwrap(), &Value::Int(3));
     }
 
     #[test]
@@ -829,7 +1093,38 @@ mod tests {
     }
 
     #[test]
-    fn test_complex_operations() {
+    fn test_comments() {
+        let interpreter = run_program("
+        a = 5 # this is a comment
+        b = 10
+        # c = a + b
+        d = a * b # this is another comment
+    ");
+        assert_eq!(interpreter.variables.get("a").unwrap(), &Value::Int(5));
+        assert_eq!(interpreter.variables.get("b").unwrap(), &Value::Int(10));
+        assert_eq!(interpreter.variables.get("d").unwrap(), &Value::Int(50));
+    }
+
+    #[test]
+    fn test_float_and_int()
+    {
+        let interpreter = run_program("
+            a = 5
+            b = 5.5
+            c = a + b
+            d = a * b
+            e = a / b
+            f = a - b
+        ");
+
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Float(10.5));
+        assert_eq!(interpreter.variables.get("d").unwrap(), &Value::Float(27.5));
+        assert_eq!(interpreter.variables.get("e").unwrap(), &Value::Float(0.90909094));
+        assert_eq!(interpreter.variables.get("f").unwrap(), &Value::Float(-0.5));
+    }
+
+    #[test]
+    fn test_int_operations() {
         let interpreter = run_program("
             a = 5
             b = 10
@@ -840,16 +1135,18 @@ mod tests {
             g = f == 0
             h = (a * b) > (c / 2)
             i = (a + b) <= (c - d)
+            j = (((1+1)))
         ");
 
-        assert_eq!(interpreter.variables.get("a"), Some(&5));
-        assert_eq!(interpreter.variables.get("b"), Some(&10));
-        assert_eq!(interpreter.variables.get("c"), Some(&30));
-        assert_eq!(interpreter.variables.get("d"), Some(&6));
-        assert_eq!(interpreter.variables.get("e"), Some(&3));
-        assert_eq!(interpreter.variables.get("f"), Some(&1));
-        assert_eq!(interpreter.variables.get("g"), Some(&0));
-        assert_eq!(interpreter.variables.get("h"), Some(&1));
-        assert_eq!(interpreter.variables.get("i"), Some(&1));
+        assert_eq!(interpreter.variables.get("a").unwrap(), &Value::Int(5));
+        assert_eq!(interpreter.variables.get("b").unwrap(), &Value::Int(10));
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(30));
+        assert_eq!(interpreter.variables.get("d").unwrap(), &Value::Int(6));
+        assert_eq!(interpreter.variables.get("e").unwrap(), &Value::Int(3));
+        assert_eq!(interpreter.variables.get("f").unwrap(), &Value::Int(1));
+        assert_eq!(interpreter.variables.get("g").unwrap(), &Value::Int(0));
+        assert_eq!(interpreter.variables.get("h").unwrap(), &Value::Int(1));
+        assert_eq!(interpreter.variables.get("i").unwrap(), &Value::Int(1));
+        assert_eq!(interpreter.variables.get("j").unwrap(), &Value::Int(2));
     }
 }

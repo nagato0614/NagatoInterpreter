@@ -20,6 +20,8 @@ Rust 勉強のため自作言語用のインタプリタを作成する
  - 同じ変数が使われたときは値が更新される
  - 変数を再定義した場合は上書きされる
  - 比較演算は真の場合は1, 偽の場合は0を返す
+ - 型は浮動小数点と整数のみ対応する
+ - '#' 以降はコメントとして無視される
 
 ## Backus Naur Form
 - Equation : 式
@@ -39,5 +41,7 @@ Rust 勉強のため自作言語用のインタプリタを作成する
   ArithmeticOperandParen ::= ( | )
   ComparisonOperator ::= < | > | == | <= | >= | !=
   Variable ::= (a-z)+
-  Value ::= [0-9]+
+  Value ::= Integer | Float
+  Integer ::= [0-9]+
+  Float ::= [0-9]+ '.' [0-9]+
 ```
