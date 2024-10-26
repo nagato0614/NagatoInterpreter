@@ -14,6 +14,22 @@ const MOD: &str = "%";
 const EQUAL: &str = "=";
 const LEFT_PAREN: &str = "(";
 const RIGHT_PAREN: &str = ")";
+const COMPARISON: &str = "==";
+const GREATER_THAN: &str = ">";
+const LESS_THAN: &str = "<";
+const GREATER_THAN_OR_EQUAL: &str = ">=";
+const LESS_THAN_OR_EQUAL: &str = "<=";
+
+#[derive(Debug, Clone)]
+enum ComparisonOperand
+{
+    Equal,
+    GreaterThan,
+    LessThan,
+    GreaterThanOrEqual,
+    LessThanOrEqual,
+    None,
+}
 
 #[derive(Debug, Clone)]
 enum ArithmeticOperandTail
@@ -48,6 +64,7 @@ enum Token
     OperatorTail(ArithmeticOperandTail),
     Variable(String),
     OperatorParen(ArithmeticOperandParen),
+    OperatorComparison(ComparisonOperand),
     Assign,
     None,
 }
@@ -76,6 +93,15 @@ impl fmt::Display for Token
             {
                 ArithmeticOperandParen::Left => write!(f, "{}", LEFT_PAREN),
                 ArithmeticOperandParen::Right => write!(f, "{}", RIGHT_PAREN),
+                _ => write!(f, "None"),
+            },
+            Token::OperatorComparison(op) => match op
+            {
+                ComparisonOperand::Equal => write!(f, "{}", COMPARISON),
+                ComparisonOperand::GreaterThan => write!(f, "{}", GREATER_THAN),
+                ComparisonOperand::LessThan => write!(f, "{}", LESS_THAN),
+                ComparisonOperand::GreaterThanOrEqual => write!(f, "{}", GREATER_THAN_OR_EQUAL),
+                ComparisonOperand::LessThanOrEqual => write!(f, "{}", LESS_THAN_OR_EQUAL),
                 _ => write!(f, "None"),
             },
             Token::Variable(var) => write!(f, "{}", var),
@@ -192,10 +218,11 @@ impl Interpreter
             return result;
         }
 
-        for i in 0..len {
+        let mut i = 0;
+        while i < len {
             let c = line.chars().nth(i).unwrap();
             match c {
-                '+' | '-' | '*' | '/' | '%' | '=' | '(' | ')' => {
+                '+' | '-' | '*' | '/' | '%' | '(' | ')' => {
 
                     // ためていたトークンを追加
                     if token.len() > 0 {
@@ -206,6 +233,30 @@ impl Interpreter
                     // 演算子を追加
                     result.push(c.to_string());
                 }
+                '>' | '<' | '=' =>
+                    {
+                        // もう一つ次の文字を取得
+                        let next = line.chars().nth(i + 1).unwrap();
+
+                        // ためていたトークンを追加
+                        if token.len() > 0 {
+                            result.push(token.clone());
+                            token.clear();
+                        }
+
+                        // 比較演算子を追加
+                        match next {
+                            '=' => {
+                                result.push(format!("{}{}", c, next));
+                            }
+                            _ => {
+                                result.push(c.to_string());
+                            }
+                        }
+
+                        // 次の文字をスキップ
+                        i += 1;
+                    }
                 ' ' => {
                     // ためていたトークンを追加
                     if token.len() > 0 {
@@ -217,6 +268,7 @@ impl Interpreter
                     token.push(c);
                 }
             }
+            i += 1;
         }
 
         // ためていたトークンを追加
@@ -274,6 +326,7 @@ impl Interpreter
 
         result
     }
+
 
     fn arithmetic_equation(&mut self, mut tokens: &mut Vec<Token>) -> i32
     {
@@ -416,11 +469,34 @@ impl Interpreter
 mod tests {
     use super::*;
 
+    fn parse_line(program: &str) -> Vec<String> {
+        let mut interpreter = Interpreter::new();
+        interpreter.parse_line(program)
+    }
+
     fn run_program(program: &str) -> Interpreter {
         let mut interpreter = Interpreter::new();
         interpreter.contents = program.to_string();
         interpreter.run_interpreter();
         interpreter
+    }
+
+    #[test]
+    fn test_parse_line_with_comparison() {
+        let tokens = parse_line("a = 4 >= 5");
+        assert_eq!(tokens, vec!["a", "=", "4", ">=", "5"]);
+
+        let tokens = parse_line("b = 3 < 2");
+        assert_eq!(tokens, vec!["b", "=", "3", "<", "2"]);
+
+        let tokens = parse_line("c = 1 == 1");
+        assert_eq!(tokens, vec!["c", "=", "1", "==", "1"]);
+
+        let tokens = parse_line("d = 2 <= 3");
+        assert_eq!(tokens, vec!["d", "=", "2", "<=", "3"]);
+
+        let tokens = parse_line("e = 4 > 5");
+        assert_eq!(tokens, vec!["e", "=", "4", ">", "5"]);
     }
 
     #[test]
