@@ -23,7 +23,7 @@ const GREATER_THAN_OR_EQUAL: &str = ">=";
 const LESS_THAN_OR_EQUAL: &str = "<=";
 
 #[derive(Debug, Clone)]
-enum ComparisonOperand
+pub(crate) enum ComparisonOperand
 {
     Equal,
     GreaterThan,
@@ -52,7 +52,7 @@ impl Display for ComparisonOperand
 }
 
 #[derive(Debug, Clone)]
-enum ArithmeticOperandTail
+pub(crate) enum ArithmeticOperandTail
 {
     Multiply,
     Divide,
@@ -61,7 +61,7 @@ enum ArithmeticOperandTail
 }
 
 #[derive(Debug, Clone)]
-enum ArithmeticOperandHead
+pub(crate) enum ArithmeticOperandHead
 {
     Plus,
     Minus,
@@ -69,7 +69,7 @@ enum ArithmeticOperandHead
 }
 
 #[derive(Debug, Clone)]
-enum ArithmeticOperandParen
+pub(crate) enum ArithmeticOperandParen
 {
     Left,
     Right,
@@ -77,7 +77,7 @@ enum ArithmeticOperandParen
 }
 
 #[derive(Debug, Clone)]
-enum Token
+pub(crate) enum Token
 {
     Value(Value),
     OperatorHead(ArithmeticOperandHead),
@@ -133,7 +133,7 @@ impl Display for Token
 
 #[derive(Debug, Clone)]
 #[derive(PartialEq)]
-enum Value
+pub enum Value
 {
     Int(i32),
     Float(f32),
@@ -162,48 +162,31 @@ pub struct Interpreter
 
 impl Interpreter
 {
-    pub fn new() -> Self
+    pub fn new(contents: &str) -> Self
     {
         Interpreter
         {
             variables: HashMap::new(),
-            contents: String::new(),
+            contents: contents.to_string(),
         }
     }
 
-    fn parse_arguments(&mut self) -> File
+    pub fn get_variable(&self, var: &str) -> Value
     {
-        let args: Vec<String> = env::args().collect();
-
-        if args.len() < 2 {
-            eprintln!("Usage: {} <source_file>", args[0]);
-            std::process::exit(1);
-        }
-
-        let source_file = &args[1];
-
-        if let Ok(f) = File::open(source_file)
+        if let Some(val) = self.variables.get(var)
         {
-            f
+            val.clone()
         } else {
-            eprintln!("File not found: {}", source_file);
-            std::process::exit(1);
+            panic!("変数がありません : {}", var);
         }
     }
-
 
     pub fn run(&mut self)
     {
-        let mut f = self.parse_arguments();
-
-
-        f.read_to_string(&mut self.contents).expect("Failed to read file");
-
-
         self.run_interpreter();
     }
 
-    fn run_interpreter(&mut self)
+    pub(crate) fn run_interpreter(&mut self)
     {
         let lines: Vec<String> = self.contents.lines().map(
             |line| line.to_string()
@@ -230,7 +213,7 @@ impl Interpreter
         }
     }
 
-    fn check_parentheses(&self, line: &str) -> bool
+    pub(crate) fn check_parentheses(&self, line: &str) -> bool
     {
         let re = Regex::new(r"\(|\)").unwrap();
         let mut count = 0;
@@ -247,7 +230,7 @@ impl Interpreter
         count == 0
     }
 
-    fn convert_token(&mut self, token: &str) -> Token
+    pub(crate) fn convert_token(&mut self, token: &str) -> Token
     {
         match token {
             PLUS => Token::OperatorHead(ArithmeticOperandHead::Plus),
@@ -277,7 +260,7 @@ impl Interpreter
         }
     }
 
-    fn parse_line(&mut self, line: &str) -> Vec<String>
+    pub(crate) fn parse_line(&mut self, line: &str) -> Vec<String>
     {
         let mut result = Vec::new();
         let len = line.len();
@@ -353,7 +336,7 @@ impl Interpreter
         result
     }
 
-    fn run_line(&mut self, mut tokens: &mut Vec<Token>)
+    pub(crate) fn run_line(&mut self, mut tokens: &mut Vec<Token>)
     {
         // 変数一つだけの場合はそのまま表示
         if tokens.len() == 1 {
@@ -375,7 +358,7 @@ impl Interpreter
         self.equation(tokens);
     }
 
-    fn equation(&mut self, tokens: &mut Vec<Token>)
+    pub(crate) fn equation(&mut self, tokens: &mut Vec<Token>)
     {
         let first = tokens.pop().unwrap();
         let second = tokens.pop().unwrap();
@@ -489,7 +472,7 @@ impl Interpreter
         }
     }
 
-    fn arithmetic_equation(&mut self, mut tokens: &mut Vec<Token>) -> Value
+    pub(crate) fn arithmetic_equation(&mut self, mut tokens: &mut Vec<Token>) -> Value
     {
         let mut result = self.term(&mut tokens);
         while tokens.len() > 0
@@ -553,7 +536,7 @@ impl Interpreter
         result
     }
 
-    fn term(&mut self, tokens: &mut Vec<Token>) -> Value
+    pub(crate) fn term(&mut self, tokens: &mut Vec<Token>) -> Value
     {
         if tokens.len() == 0
         {
@@ -666,7 +649,7 @@ impl Interpreter
 
         result
     }
-    fn factor(&mut self, tokens: &mut Vec<Token>) -> Value
+    pub(crate) fn factor(&mut self, tokens: &mut Vec<Token>) -> Value
     {
         let token = tokens.pop().unwrap();
         match token
@@ -713,17 +696,19 @@ impl Interpreter
 }
 
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn parse_line(program: &str) -> Vec<String> {
-        let mut interpreter = Interpreter::new();
-        interpreter.parse_line(program)
+        let mut interpreter = Interpreter::new(program);
+        let line = program.lines().next().unwrap();
+        interpreter.parse_line(line)
     }
 
     fn run_program(program: &str) -> Interpreter {
-        let mut interpreter = Interpreter::new();
+        let mut interpreter = Interpreter::new(program);
         interpreter.contents = program.to_string();
         interpreter.run_interpreter();
         interpreter
@@ -1124,6 +1109,16 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "整数型以外の演算はできません")]
+    fn test_invalid_operation() {
+        let _interpreter = run_program("
+            a = 5
+            b = 5.5
+            c = a % b
+        ");
+    }
+
+    #[test]
     fn test_int_operations() {
         let interpreter = run_program("
             a = 5
@@ -1148,5 +1143,32 @@ mod tests {
         assert_eq!(interpreter.variables.get("h").unwrap(), &Value::Int(1));
         assert_eq!(interpreter.variables.get("i").unwrap(), &Value::Int(1));
         assert_eq!(interpreter.variables.get("j").unwrap(), &Value::Int(2));
+    }
+
+    #[test]
+    fn test_float_operations() {
+        let interpreter = run_program("
+        a = 5.5
+        b = 10.2
+        c = (a + b) * 2.0
+        d = c / 5.1
+        e = d - 3.3
+        f = e / 2.2
+        g = f == 0.0
+        h = (a * b) > (c / 2.0)
+        i = (a + b) <= (c - d)
+        j = (((1.1 + 1.1)))
+    ");
+
+        assert_eq!(interpreter.variables.get("a").unwrap(), &Value::Float(5.5));
+        assert_eq!(interpreter.variables.get("b").unwrap(), &Value::Float(10.2));
+        assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Float(31.4));
+        assert_eq!(interpreter.variables.get("d").unwrap(), &Value::Float(6.156862745098039));
+        assert_eq!(interpreter.variables.get("e").unwrap(), &Value::Float(2.856862745098039));
+        assert_eq!(interpreter.variables.get("f").unwrap(), &Value::Float(1.2985739704991095));
+        assert_eq!(interpreter.variables.get("g").unwrap(), &Value::Int(0));
+        assert_eq!(interpreter.variables.get("h").unwrap(), &Value::Int(1));
+        assert_eq!(interpreter.variables.get("i").unwrap(), &Value::Int(1));
+        assert_eq!(interpreter.variables.get("j").unwrap(), &Value::Float(2.2));
     }
 }
