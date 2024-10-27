@@ -157,6 +157,7 @@ pub struct Interpreter
 {
     variables: HashMap<String, Value>,
     contents: String,
+    tokens_list: Vec<Vec<Token>>,
 }
 
 
@@ -168,6 +169,7 @@ impl Interpreter
         {
             variables: HashMap::new(),
             contents: contents.to_string(),
+            tokens_list: Vec::new(),
         }
     }
 
@@ -209,6 +211,10 @@ impl Interpreter
                 panic!("括弧の数が正しくありません : {}", line);
             }
 
+            self.tokens_list.push(tokens);
+        }
+
+        for mut tokens in self.tokens_list.clone() {
             self.run_line(&mut tokens);
         }
     }
@@ -346,16 +352,13 @@ impl Interpreter
         // 変数一つだけの場合はそのまま表示
         if tokens.len() == 1 {
             self.variable(tokens.pop().unwrap());
-        }
-        else
-        {
+        } else {
             self.assignment(tokens);
         }
     }
 
     fn assignment(&mut self, tokens: &mut Vec<Token>)
     {
-
         tokens.reverse();
         let first = tokens.pop().unwrap();
         let second = tokens.pop().unwrap();
@@ -705,7 +708,6 @@ impl Interpreter
         }
     }
 }
-
 
 
 #[cfg(test)]
