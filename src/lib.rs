@@ -215,7 +215,7 @@ impl Interpreter
 
     pub(crate) fn check_parentheses(&self, line: &str) -> bool
     {
-        let re = Regex::new(r"\(|\)").unwrap();
+        let re = Regex::new(r"[()]").unwrap();
         let mut count = 0;
         for c in re.captures_iter(line) {
             match c.get(0).unwrap().as_str() {
@@ -338,28 +338,25 @@ impl Interpreter
 
     pub(crate) fn run_line(&mut self, mut tokens: &mut Vec<Token>)
     {
-        // 変数一つだけの場合はそのまま表示
-        if tokens.len() == 1 {
-            match tokens[0] {
-                Token::Variable(ref var) => {
-                    if let Some(val) = self.variables.get(var) {
-                        println!("{}", val);
-                    } else {
-                        panic!("変数がありません : {}", var);
-                    }
-                }
-                _ => {}
-            }
-            return;
-        }
-
-        tokens.reverse();
-
         self.equation(tokens);
     }
 
     pub(crate) fn equation(&mut self, tokens: &mut Vec<Token>)
     {
+        // 変数一つだけの場合はそのまま表示
+        if tokens.len() == 1 {
+            self.variable(tokens.pop().unwrap());
+        }
+        else
+        {
+            self.assignment(tokens);
+        }
+    }
+
+    fn assignment(&mut self, tokens: &mut Vec<Token>)
+    {
+
+        tokens.reverse();
         let first = tokens.pop().unwrap();
         let second = tokens.pop().unwrap();
 
@@ -469,6 +466,20 @@ impl Interpreter
             self.variables.insert(var, result);
         } else {
             panic!("変数がありません : {}", first);
+        }
+    }
+
+    fn variable(&mut self, token: Token)
+    {
+        match token {
+            Token::Variable(ref var) => {
+                if let Some(val) = self.variables.get(var) {
+                    println!("{}", val);
+                } else {
+                    panic!("変数がありません : {}", var);
+                }
+            }
+            _ => {}
         }
     }
 

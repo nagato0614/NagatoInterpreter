@@ -1,8 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use std::collections::hash_map::Values;
     use NagatoInterpreter::{Interpreter, Value};
-    use super::*;
 
     #[test]
     fn test_interpreter_new() {
