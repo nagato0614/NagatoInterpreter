@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
-use NagatoInterpreter::Interpreter;
+use NagatoInterpreter::runtime;
 
 fn parse_arguments() -> File
 {
@@ -31,7 +31,7 @@ fn main() {
     let mut source_code = String::new();
     source_file.read_to_string(&mut source_code).expect("Failed to read file");
 
+    runtime(&source_code);
 
-    let mut interpreter = Interpreter::new(&source_code);
-    interpreter.run();
+
 }

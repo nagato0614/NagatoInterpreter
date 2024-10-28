@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::env;
-use std::fmt::Display;
+use std::fmt::{Arguments, Display};
 use std::fs::File;
 use std::io::prelude::*;
 use std::ptr::null;
@@ -207,259 +207,70 @@ impl Function
         }
     }
 
-    pub fn run() -> Value
+    fn run(&mut self, arguments: Vec<Value>) -> Value
     {
         Value::Int(0)
     }
 }
-
-
-pub struct Interpreter
+fn check_parentheses(tokens: &Vec<Token>) -> bool
 {
-    variables: HashMap<String, Value>,
-    contents: String,
-    tokens_list: Vec<Vec<Token>>,
-    functions: HashMap<String, Function>,
+    let mut count = 0;
+    for token in tokens.clone() {
+        match token {
+            Token::OperatorParen(ArithmeticOperandParen::Left) => count += 1,
+            Token::OperatorParen(ArithmeticOperandParen::Right) => count -= 1,
+            _ => {}
+        }
+    }
+    count == 0
 }
 
+fn check_block_parentheses(tokens: &Vec<Token>) -> bool
+{
+    let mut count = 0;
+    for token in tokens.clone() {
+        match token {
+            Token::BlockParen(BlockParen::Left) => count += 1,
+            Token::BlockParen(BlockParen::Right) => count -= 1,
+            _ => {}
+        }
+    }
 
-impl Interpreter
+    println!("count : {}", count);
+    count == 0
+}
+
+pub struct Runtime
+{
+    parser: Parser,
+    interpreter: Interpreter,
+}
+
+pub fn runtime(contents: &str)
+{
+    let mut parser = Parser::new(contents);
+    let mut tokens_list = parser.convert_token_list();
+
+    let mut interpreter = Interpreter::new(tokens_list);
+    interpreter.run();
+}
+
+pub struct Parser
+{
+    contents: String,
+}
+
+impl Parser
 {
     pub fn new(contents: &str) -> Self
     {
-        Interpreter
+        Parser
         {
-            variables: HashMap::new(),
             contents: contents.to_string(),
-            tokens_list: Vec::new(),
-            functions: HashMap::new(),
         }
     }
 
-    pub fn get_variable(&self, var: &str) -> Value
-    {
-        if let Some(val) = self.variables.get(var)
-        {
-            val.clone()
-        } else {
-            panic!("変数がありません : {}", var);
-        }
-    }
-
-    pub fn run(&mut self)
-    {
-        self.run_interpreter();
-    }
-
-    pub(crate) fn run_interpreter(&mut self)
-    {
-        self.convert_token_list();
-        self.run_lines();
-    }
-
-    fn run_lines(&mut self)
-    {
-        for mut tokens in self.tokens_list.clone() {
-            self.equation(&mut tokens);
-        }
-    }
-
-    fn convert_token_list(&mut self)
-    {
-        let lines: Vec<String> = self.contents.lines().map(
-            |line| line.to_string()
-        ).collect();
-        for line in lines {
-            // 1行をトークンに分割する
-            let tokens = &mut self.parse_line(line.as_str());
-
-            // 文字列をtoken型の列に変換する
-            let mut tokens: Vec<Token> = tokens.iter().map(|token| self.convert_token(token))
-                .collect();
-
-            // トークン列が空の場合は次の行へ
-            if tokens.len() == 0 {
-                continue;
-            }
-
-            // 括弧の数が正しいか確認
-            if !self.check_parentheses(&tokens) {
-                panic!("括弧の数が正しくありません : {}", line);
-            }
-
-            self.tokens_list.push(tokens);
-        }
-    }
-
-    fn extract_functions(&mut self)
-    {
-        let mut function_tokens: Vec<Token> = Vec::new();
-        let mut i = 0;
-
-        while i < self.tokens_list.len() {
-            let tokens = self.tokens_list[i].clone();
-
-            // token列にfuncが含まれている場合は関数を抽出し, 行を削除
-            if tokens.contains(&Token::Function) {
-                let mut line = tokens.clone();
-                for line in line {
-                    function_tokens.push(line);
-                }
-                self.tokens_list.remove(i);
-            }
-
-            // この列に } が含まれている場合は見つかるまで行を追加する
-            while i < self.tokens_list.len() {
-                let mut line = tokens.clone();
-                for line in line {
-                    function_tokens.push(line);
-                }
-                if tokens.contains(&Token::BlockParen(BlockParen::Right)) {
-                    break;
-                }
-                i += 1;
-            }
-
-            // 関数を変換
-            let function = self.convert_function(&mut function_tokens);
-            self.functions.insert(function.name.clone(), function);
-
-            function_tokens.clear();
-            i += 1;
-        }
-    }
-
-    fn check_block_parentheses(&self, tokens: &Vec<Token>) -> bool
-    {
-        let mut count = 0;
-        for token in tokens.clone() {
-            match token {
-                Token::BlockParen(BlockParen::Left) => count += 1,
-                Token::BlockParen(BlockParen::Right) => count -= 1,
-                _ => {}
-            }
-        }
-
-        println!("count : {}", count);
-        count == 0
-    }
-
-    fn convert_function(&mut self, mut tokens: &mut Vec<Token>) -> Function
-    {
-        let mut name = String::new();
-        let mut args = Vec::new();
-        let mut body = Vec::new();
-
-
-        for token in tokens.clone() {
-            println!("{}", token);
-        }
-
-        // {, } の数が正しいか確認
-        if !self.check_block_parentheses(tokens) {
-            panic!("ブロックの数が正しくありません");
-        }
-
-        // (, ) の数が正しいか確認
-        if !self.check_parentheses(tokens) {
-            panic!("括弧の数が正しくありません");
-        }
-
-        // １つ目のtokenが func であることを確認し, 除去
-        if let Some(Token::Function) = tokens.pop() {} else {
-            panic!("関数がありません");
-        }
-
-        // 関数名を取得
-        if let Some(Token::Identifier(var)) = tokens.pop() {
-            name = var.clone();
-        } else {
-            panic!("関数名がありません");
-        }
-
-        // 関数の引数を取得. ) が見つかるまで繰り返す
-        while let Some(token) = tokens.pop() {
-            println!("In while loop : {}", token);
-            match token {
-                Token::OperatorParen(ArithmeticOperandParen::Left) => {}
-                Token::OperatorParen(ArithmeticOperandParen::Right) => {
-                    break;
-                }
-                Token::Identifier(var) => {
-                    args.push(var.clone());
-                }
-                Token::COMMA => {}
-                _ => {
-                    panic!("引数がありません : {}", token);
-                }
-            }
-        }
-
-        // } が見つかるまで関数の本体を取得
-        while let Some(token) = tokens.pop() {
-            match token {
-                Token::BlockParen(BlockParen::Left) => {}
-                Token::BlockParen(BlockParen::Right) => {
-                    break;
-                }
-                _ => {
-                    body.push(token);
-                }
-            }
-        }
-
-        // 関数の引数を取得
-        Function::new(name.as_str(), args, body)
-    }
-
-    pub(crate) fn check_parentheses(&self, tokens: &Vec<Token>) -> bool
-    {
-        let mut count = 0;
-        for token in tokens.clone() {
-            match token {
-                Token::OperatorParen(ArithmeticOperandParen::Left) => count += 1,
-                Token::OperatorParen(ArithmeticOperandParen::Right) => count -= 1,
-                _ => {}
-            }
-        }
-        count == 0
-    }
-
-    pub(crate) fn convert_token(&mut self, token: &str) -> Token
-    {
-        match token {
-            PLUS => Token::OperatorHead(ArithmeticOperandHead::Plus),
-            MINUS => Token::OperatorHead(ArithmeticOperandHead::Minus),
-            MULTIPLY => Token::OperatorTail(ArithmeticOperandTail::Multiply),
-            DIVIDE => Token::OperatorTail(ArithmeticOperandTail::Divide),
-            MOD => Token::OperatorTail(ArithmeticOperandTail::Mod),
-            LEFT_PAREN => Token::OperatorParen(ArithmeticOperandParen::Left),
-            RIGHT_PAREN => Token::OperatorParen(ArithmeticOperandParen::Right),
-            EQUAL => Token::Assign,
-            COMPARISON => Token::OperatorComparison(ComparisonOperand::Equal),
-            GREATER_THAN => Token::OperatorComparison(ComparisonOperand::GreaterThan),
-            LESS_THAN => Token::OperatorComparison(ComparisonOperand::LessThan),
-            GREATER_THAN_OR_EQUAL => Token::OperatorComparison(ComparisonOperand::GreaterThanOrEqual),
-            LESS_THAN_OR_EQUAL => Token::OperatorComparison(ComparisonOperand::LessThanOrEqual),
-            NOT_EQUAL => Token::OperatorComparison(ComparisonOperand::NotEqual),
-            BLOCK_LEFT_PAREN => Token::BlockParen(BlockParen::Left),
-            BLOCK_RIGHT_PAREN => Token::BlockParen(BlockParen::Right),
-            COMMA => Token::COMMA,
-            END_OF_EXPRESSION => Token::EndOfExpression,
-            _ => {
-                // 整数か浮動小数点数か判定
-                if let Ok(num) = token.parse::<i32>() {
-                    Token::Value(Value::Int(num))
-                } else if let Ok(num) = token.parse::<f32>() {
-                    Token::Value(Value::Float(num))
-                } else {
-                    Token::Identifier(token.to_string())
-                }
-            }
-        }
-    }
-
-    pub(crate) fn parse_line(&mut self, line: &str) -> Vec<String>
+    fn parse_line(&mut self, line: &str) -> Vec<String>
     {
         let mut result = Vec::new();
         let len = line.len();
@@ -544,6 +355,225 @@ impl Interpreter
         }
         result
     }
+
+
+    fn convert_token(&mut self, token: &str) -> Token
+    {
+        match token {
+            PLUS => Token::OperatorHead(ArithmeticOperandHead::Plus),
+            MINUS => Token::OperatorHead(ArithmeticOperandHead::Minus),
+            MULTIPLY => Token::OperatorTail(ArithmeticOperandTail::Multiply),
+            DIVIDE => Token::OperatorTail(ArithmeticOperandTail::Divide),
+            MOD => Token::OperatorTail(ArithmeticOperandTail::Mod),
+            LEFT_PAREN => Token::OperatorParen(ArithmeticOperandParen::Left),
+            RIGHT_PAREN => Token::OperatorParen(ArithmeticOperandParen::Right),
+            EQUAL => Token::Assign,
+            COMPARISON => Token::OperatorComparison(ComparisonOperand::Equal),
+            GREATER_THAN => Token::OperatorComparison(ComparisonOperand::GreaterThan),
+            LESS_THAN => Token::OperatorComparison(ComparisonOperand::LessThan),
+            GREATER_THAN_OR_EQUAL => Token::OperatorComparison(ComparisonOperand::GreaterThanOrEqual),
+            LESS_THAN_OR_EQUAL => Token::OperatorComparison(ComparisonOperand::LessThanOrEqual),
+            NOT_EQUAL => Token::OperatorComparison(ComparisonOperand::NotEqual),
+            BLOCK_LEFT_PAREN => Token::BlockParen(BlockParen::Left),
+            BLOCK_RIGHT_PAREN => Token::BlockParen(BlockParen::Right),
+            COMMA => Token::COMMA,
+            END_OF_EXPRESSION => Token::EndOfExpression,
+            _ => {
+                // 整数か浮動小数点数か判定
+                if let Ok(num) = token.parse::<i32>() {
+                    Token::Value(Value::Int(num))
+                } else if let Ok(num) = token.parse::<f32>() {
+                    Token::Value(Value::Float(num))
+                } else {
+                    Token::Identifier(token.to_string())
+                }
+            }
+        }
+    }
+    fn convert_token_list(&mut self) -> Vec<Vec<Token>>
+    {
+        let mut tokens_list = Vec::new();
+        let lines: Vec<String> = self.contents.lines().map(
+            |line| line.to_string()
+        ).collect();
+        for line in lines {
+            // 1行をトークンに分割する
+            let tokens = &mut self.parse_line(line.as_str());
+
+            // 文字列をtoken型の列に変換する
+            let mut tokens: Vec<Token> = tokens.iter().map(|token| self.convert_token(token))
+                .collect();
+
+            // トークン列が空の場合は次の行へ
+            if tokens.len() == 0 {
+                continue;
+            }
+
+            // 括弧の数が正しいか確認
+            if !check_parentheses(&tokens) {
+                panic!("括弧の数が正しくありません : {}", line);
+            }
+
+            tokens_list.push(tokens);
+        }
+
+        tokens_list
+    }
+}
+
+pub struct Interpreter
+{
+    variables: HashMap<String, Value>,
+    tokens_list: Vec<Vec<Token>>,
+    functions: HashMap<String, Function>,
+}
+
+
+impl Interpreter
+{
+    pub fn new(tokens_list: Vec<Vec<Token>>) -> Self
+    {
+        Interpreter
+        {
+            variables: HashMap::new(),
+            tokens_list,
+            functions: HashMap::new(),
+        }
+    }
+
+    pub fn get_variable(&self, var: &str) -> Value
+    {
+        if let Some(val) = self.variables.get(var)
+        {
+            val.clone()
+        } else {
+            panic!("変数がありません : {}", var);
+        }
+    }
+
+    pub fn run(&mut self)
+    {
+        self.run_lines();
+    }
+
+    fn run_lines(&mut self)
+    {
+        for mut tokens in self.tokens_list.clone() {
+            self.equation(&mut tokens);
+        }
+    }
+
+
+    fn extract_functions(&mut self)
+    {
+        let mut function_tokens: Vec<Token> = Vec::new();
+        let mut i = 0;
+
+        while i < self.tokens_list.len() {
+            let tokens = self.tokens_list[i].clone();
+
+            // token列にfuncが含まれている場合は関数を抽出し, 行を削除
+            if tokens.contains(&Token::Function) {
+                let mut line = tokens.clone();
+                for line in line {
+                    function_tokens.push(line);
+                }
+                self.tokens_list.remove(i);
+            }
+
+            // この列に } が含まれている場合は見つかるまで行を追加する
+            while i < self.tokens_list.len() {
+                let mut line = tokens.clone();
+                for line in line {
+                    function_tokens.push(line);
+                }
+                if tokens.contains(&Token::BlockParen(BlockParen::Right)) {
+                    break;
+                }
+                i += 1;
+            }
+
+            // 関数を変換
+            let function = self.convert_function(&mut function_tokens);
+            self.functions.insert(function.name.clone(), function);
+
+            function_tokens.clear();
+            i += 1;
+        }
+    }
+
+
+
+    fn convert_function(&mut self, mut tokens: &mut Vec<Token>) -> Function
+    {
+        let mut name = String::new();
+        let mut args = Vec::new();
+        let mut body = Vec::new();
+
+
+        for token in tokens.clone() {
+            println!("{}", token);
+        }
+
+        // {, } の数が正しいか確認
+        if !check_block_parentheses(tokens) {
+            panic!("ブロックの数が正しくありません");
+        }
+
+        // (, ) の数が正しいか確認
+        if !check_parentheses(tokens) {
+            panic!("括弧の数が正しくありません");
+        }
+
+        // １つ目のtokenが func であることを確認し, 除去
+        if let Some(Token::Function) = tokens.pop() {} else {
+            panic!("関数がありません");
+        }
+
+        // 関数名を取得
+        if let Some(Token::Identifier(var)) = tokens.pop() {
+            name = var.clone();
+        } else {
+            panic!("関数名がありません");
+        }
+
+        // 関数の引数を取得. ) が見つかるまで繰り返す
+        while let Some(token) = tokens.pop() {
+            println!("In while loop : {}", token);
+            match token {
+                Token::OperatorParen(ArithmeticOperandParen::Left) => {}
+                Token::OperatorParen(ArithmeticOperandParen::Right) => {
+                    break;
+                }
+                Token::Identifier(var) => {
+                    args.push(var.clone());
+                }
+                Token::COMMA => {}
+                _ => {
+                    panic!("引数がありません : {}", token);
+                }
+            }
+        }
+
+        // } が見つかるまで関数の本体を取得
+        while let Some(token) = tokens.pop() {
+            match token {
+                Token::BlockParen(BlockParen::Left) => {}
+                Token::BlockParen(BlockParen::Right) => {
+                    break;
+                }
+                _ => {
+                    body.push(token);
+                }
+            }
+        }
+
+        // 関数の引数を取得
+        Function::new(name.as_str(), args, body)
+    }
+
+
+
 
     pub(crate) fn equation(&mut self, tokens: &mut Vec<Token>)
     {
@@ -935,15 +965,15 @@ mod tests {
     use super::*;
 
     fn parse_line(program: &str) -> Vec<String> {
-        let mut interpreter = Interpreter::new(program);
-        let line = program.lines().next().unwrap();
-        interpreter.parse_line(line)
+        let mut parser = Parser::new(program);
+        parser.parse_line(program)
     }
 
     fn run_program(program: &str) -> Interpreter {
-        let mut interpreter = Interpreter::new(program);
-        interpreter.contents = program.to_string();
-        interpreter.run_interpreter();
+        let mut parser = Parser::new(program);
+        let mut tokens_list = parser.convert_token_list();
+        let mut interpreter = Interpreter::new(tokens_list);
+        interpreter.run();
         interpreter
     }
 
@@ -979,6 +1009,9 @@ mod tests {
         //     c = a + b
         //     return c
         // }
+        let mut mock_tokens = vec![
+            vec![],
+        ];
 
         let mut function_tokens = vec![
             Token::Function,
@@ -999,8 +1032,8 @@ mod tests {
             Token::BlockParen(BlockParen::Right),
         ];
         function_tokens.reverse();
-        let mut interpreter = Interpreter::new("");
-        let function = interpreter.convert_function(&mut function_tokens);
+        let mut interpreter = Interpreter::new(mock_tokens.clone());
+        let mut function = interpreter.convert_function(&mut function_tokens);
         assert_eq!(function.name, "add");
         assert_eq!(function.args, vec!["a", "b"]);
         assert_eq!(function.body, vec![
@@ -1012,6 +1045,10 @@ mod tests {
             Token::Return,
             Token::Identifier("c".to_string()),
         ]);
+
+        // 関数を実行
+        let result = function.run(vec![Value::Int(5), Value::Int(10)]);
+        assert_eq!(result, Value::Int(15));
     }
 
     #[test]
@@ -1344,7 +1381,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "括弧の数が正しくありません : a = (1 + 2 * 3")]
     fn test_unmatched_left_parenthesis() {
-        let _interpreter = run_program("a = (1 + 2 * 3");
+        let _interpreter = run_program("a = (1 + 2 * 3;");
     }
 
     #[test]
