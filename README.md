@@ -24,12 +24,13 @@ Rust 勉強のため自作言語用のインタプリタを作成する
  - 型は浮動小数点と整数のみ対応する
  - '#' 以降はコメントとして無視される
  - 固定長の引数を取る関数を定義することができる
+ - 式の最後には必ずセミコロンをつけること
 
 ## 関数の例
 関数は以下のように定義することができる
 ```
     func(a) {
-        a + 1
+        return = a + 1
     }
     a = 1
     b = func(a)
@@ -37,7 +38,38 @@ Rust 勉強のため自作言語用のインタプリタを作成する
 ```
 
 引数としてaを受取り, a+1 の結果を返す.
+関数内には必ずreturn文を記述すること.
 関数内の変数は関数内でのみ有効で,外部変数は取り扱わない
+
+また, 1行で記述も可能
+```
+    func(a) { return a + 1 } 
+    a = 1 
+    b = func(a) 
+    b
+```
+
+波括弧は省略できず, 以下のような処理はできない
+```:エラー
+    func(a) return a + 1
+```
+
+関数の引数は複数指定することができる
+```
+    func(a, b) { return a + b }
+    a = 1
+    b = 2
+    c = func(a, b)
+    c
+```
+
+一つの引数内に関数呼び出しは不可能
+```エラー
+    func(a) { return a + 1 }
+    a = 1
+    b = func(func(a))
+    b
+```
 
 ## Backus Naur Form
 - Equation : 式
@@ -46,18 +78,29 @@ Rust 勉強のため自作言語用のインタプリタを作成する
 - Arithmetic Equation (AE) : 算術式 
 - Arithmetic operand (AO) : 算術演算オペランド (+, -, *, /, %)
 ```
-  Equation ::= Variable | Assignment
-  Function ::= "func" '(' Equation ')' '{' Equation '}'
+  Equation ::= Identifier ';' | Assignment ';'
+  Assignment ::= Identifier '=' ArithmeticEquation
+               | Identifier '=' FunctionCall
+               | Identifier '=' Comparison
+               
   Comparison ::= ArithmeticEquation ComparisonOperator ArithmeticEquation
-  Assignment ::= Variable '=' ArithmeticEquation | Variable '=' Function | Variable '=' Comparison
+ 
+  Function ::= "func" Identifier '(' Equation ')' Block
+  Block ::= '{' Statement* ReturnStatement '}'
+  Statement ::= Equation | FunctionCall
+  FunctionCall ::= Identifier '(' Arguments ')'
+  Arguments ::= [Variable] (',' [Variable])*
+  ReturnStatement ::= "return" Identifier
+  
   ArithmeticEquation ::= Term | Term ArithmeticOperandHead Term
   Term ::= Factor | Factor ArithmeticOperandTail Factor
-  Factor ::= Value | Variable | '(' ArithmeticEquation ')'
+  Factor ::= Value | Identifier | '(' ArithmeticEquation ')'
   ArithmeticOperandHead ::= + | -
   ArithmeticOperandTail ::= * | / | %  
   ArithmeticOperandParen ::= ( | )
   ComparisonOperator ::= < | > | == | <= | >= | !=
-  Variable ::= (a-z)+
+  BlockParen ::= { | }
+  Identifier ::= (a-z)+
   Value ::= Integer | Float
   Integer ::= [0-9]+
   Float ::= [0-9]+ '.' [0-9]+

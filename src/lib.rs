@@ -4,6 +4,7 @@ use std::env;
 use std::fmt::Display;
 use std::fs::File;
 use std::io::prelude::*;
+use std::ptr::null;
 use regex::Regex;
 
 // 定数
@@ -21,8 +22,14 @@ const GREATER_THAN: &str = ">";
 const LESS_THAN: &str = "<";
 const GREATER_THAN_OR_EQUAL: &str = ">=";
 const LESS_THAN_OR_EQUAL: &str = "<=";
+const FUNCTION: &str = "func";
+const RETURN: &str = "return";
+const BLOCK_LEFT_PAREN: &str = "{";
+const BLOCK_RIGHT_PAREN: &str = "}";
+const COMMA: &str = ",";
+const END_OF_EXPRESSION: &str = ";";
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ComparisonOperand
 {
     Equal,
@@ -51,7 +58,7 @@ impl Display for ComparisonOperand
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ArithmeticOperandTail
 {
     Multiply,
@@ -60,7 +67,7 @@ pub(crate) enum ArithmeticOperandTail
     None,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ArithmeticOperandHead
 {
     Plus,
@@ -68,7 +75,7 @@ pub(crate) enum ArithmeticOperandHead
     None,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ArithmeticOperandParen
 {
     Left,
@@ -76,16 +83,29 @@ pub(crate) enum ArithmeticOperandParen
     None,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
+enum BlockParen
+{
+    Left,
+    Right,
+    None,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Token
 {
     Value(Value),
     OperatorHead(ArithmeticOperandHead),
     OperatorTail(ArithmeticOperandTail),
-    Variable(String),
+    Identifier(String),
     OperatorParen(ArithmeticOperandParen),
     OperatorComparison(ComparisonOperand),
     Assign,
+    Function,
+    Return,
+    BlockParen(BlockParen),
+    COMMA,
+    EndOfExpression,
     None,
 }
 
@@ -124,9 +144,22 @@ impl Display for Token
                 ComparisonOperand::LessThanOrEqual => write!(f, "{}", LESS_THAN_OR_EQUAL),
                 _ => write!(f, "None"),
             },
-            Token::Variable(var) => write!(f, "{}", var),
+            Token::Identifier(var) => write!(f, "{}", var),
             Token::Assign => write!(f, "{}", EQUAL),
             Token::None => write!(f, "None"),
+            Token::Function => write!(f, "{}", FUNCTION),
+            Token::Return => write!(f, "{}", RETURN),
+            Token::BlockParen(p) =>
+                {
+                    match p
+                    {
+                        BlockParen::Left => write!(f, "{}", BLOCK_LEFT_PAREN),
+                        BlockParen::Right => write!(f, "{}", BLOCK_RIGHT_PAREN),
+                        BlockParen::None => write!(f, "None"),
+                    }
+                }
+            Token::COMMA => write!(f, "{}", COMMA),
+            Token::EndOfExpression => write!(f, "{}", END_OF_EXPRESSION),
         }
     }
 }
@@ -153,11 +186,40 @@ impl Display for Value
     }
 }
 
+struct Function
+{
+    name: String,
+    args: Vec<String>,
+    body: Vec<Token>,
+    function_variables: HashMap<String, Value>,
+}
+
+impl Function
+{
+    pub fn new(name: &str, args: Vec<String>, body: Vec<Token>) -> Self
+    {
+        Function
+        {
+            name: name.to_string(),
+            args,
+            body,
+            function_variables: HashMap::new(),
+        }
+    }
+
+    pub fn run() -> Value
+    {
+        Value::Int(0)
+    }
+}
+
+
 pub struct Interpreter
 {
     variables: HashMap<String, Value>,
     contents: String,
     tokens_list: Vec<Vec<Token>>,
+    functions: HashMap<String, Function>,
 }
 
 
@@ -170,6 +232,7 @@ impl Interpreter
             variables: HashMap::new(),
             contents: contents.to_string(),
             tokens_list: Vec::new(),
+            functions: HashMap::new(),
         }
     }
 
@@ -190,6 +253,19 @@ impl Interpreter
 
     pub(crate) fn run_interpreter(&mut self)
     {
+        self.convert_token_list();
+        self.run_lines();
+    }
+
+    fn run_lines(&mut self)
+    {
+        for mut tokens in self.tokens_list.clone() {
+            self.equation(&mut tokens);
+        }
+    }
+
+    fn convert_token_list(&mut self)
+    {
         let lines: Vec<String> = self.contents.lines().map(
             |line| line.to_string()
         ).collect();
@@ -207,30 +283,143 @@ impl Interpreter
             }
 
             // 括弧の数が正しいか確認
-            if !self.check_parentheses(line.as_str()) {
+            if !self.check_parentheses(&tokens) {
                 panic!("括弧の数が正しくありません : {}", line);
             }
 
             self.tokens_list.push(tokens);
         }
+    }
 
-        for mut tokens in self.tokens_list.clone() {
-            self.run_line(&mut tokens);
+    fn extract_functions(&mut self)
+    {
+        let mut function_tokens: Vec<Token> = Vec::new();
+        let mut i = 0;
+
+        while i < self.tokens_list.len() {
+            let tokens = self.tokens_list[i].clone();
+
+            // token列にfuncが含まれている場合は関数を抽出し, 行を削除
+            if tokens.contains(&Token::Function) {
+                let mut line = tokens.clone();
+                for line in line {
+                    function_tokens.push(line);
+                }
+                self.tokens_list.remove(i);
+            }
+
+            // この列に } が含まれている場合は見つかるまで行を追加する
+            while i < self.tokens_list.len() {
+                let mut line = tokens.clone();
+                for line in line {
+                    function_tokens.push(line);
+                }
+                if tokens.contains(&Token::BlockParen(BlockParen::Right)) {
+                    break;
+                }
+                i += 1;
+            }
+
+            // 関数を変換
+            let function = self.convert_function(&mut function_tokens);
+            self.functions.insert(function.name.clone(), function);
+
+            function_tokens.clear();
+            i += 1;
         }
     }
 
-    pub(crate) fn check_parentheses(&self, line: &str) -> bool
+    fn check_block_parentheses(&self, tokens: &Vec<Token>) -> bool
     {
-        let re = Regex::new(r"[()]").unwrap();
         let mut count = 0;
-        for c in re.captures_iter(line) {
-            match c.get(0).unwrap().as_str() {
-                "(" => count += 1,
-                ")" => count -= 1,
+        for token in tokens.clone() {
+            match token {
+                Token::BlockParen(BlockParen::Left) => count += 1,
+                Token::BlockParen(BlockParen::Right) => count -= 1,
                 _ => {}
             }
-            if count < 0 {
-                return false;
+        }
+
+        println!("count : {}", count);
+        count == 0
+    }
+
+    fn convert_function(&mut self, mut tokens: &mut Vec<Token>) -> Function
+    {
+        let mut name = String::new();
+        let mut args = Vec::new();
+        let mut body = Vec::new();
+
+
+        for token in tokens.clone() {
+            println!("{}", token);
+        }
+
+        // {, } の数が正しいか確認
+        if !self.check_block_parentheses(tokens) {
+            panic!("ブロックの数が正しくありません");
+        }
+
+        // (, ) の数が正しいか確認
+        if !self.check_parentheses(tokens) {
+            panic!("括弧の数が正しくありません");
+        }
+
+        // １つ目のtokenが func であることを確認し, 除去
+        if let Some(Token::Function) = tokens.pop() {} else {
+            panic!("関数がありません");
+        }
+
+        // 関数名を取得
+        if let Some(Token::Identifier(var)) = tokens.pop() {
+            name = var.clone();
+        } else {
+            panic!("関数名がありません");
+        }
+
+        // 関数の引数を取得. ) が見つかるまで繰り返す
+        while let Some(token) = tokens.pop() {
+            println!("In while loop : {}", token);
+            match token {
+                Token::OperatorParen(ArithmeticOperandParen::Left) => {}
+                Token::OperatorParen(ArithmeticOperandParen::Right) => {
+                    break;
+                }
+                Token::Identifier(var) => {
+                    args.push(var.clone());
+                }
+                Token::COMMA => {}
+                _ => {
+                    panic!("引数がありません : {}", token);
+                }
+            }
+        }
+
+        // } が見つかるまで関数の本体を取得
+        while let Some(token) = tokens.pop() {
+            match token {
+                Token::BlockParen(BlockParen::Left) => {}
+                Token::BlockParen(BlockParen::Right) => {
+                    break;
+                }
+                _ => {
+                    body.push(token);
+                }
+            }
+        }
+
+        // 関数の引数を取得
+        Function::new(name.as_str(), args, body)
+    }
+
+    pub(crate) fn check_parentheses(&self, tokens: &Vec<Token>) -> bool
+    {
+        let mut count = 0;
+        for token in tokens.clone() {
+            match token {
+                Token::OperatorParen(ArithmeticOperandParen::Left) => count += 1,
+                Token::OperatorParen(ArithmeticOperandParen::Right) => count -= 1,
+                _ => {}
             }
         }
         count == 0
@@ -253,6 +442,10 @@ impl Interpreter
             GREATER_THAN_OR_EQUAL => Token::OperatorComparison(ComparisonOperand::GreaterThanOrEqual),
             LESS_THAN_OR_EQUAL => Token::OperatorComparison(ComparisonOperand::LessThanOrEqual),
             NOT_EQUAL => Token::OperatorComparison(ComparisonOperand::NotEqual),
+            BLOCK_LEFT_PAREN => Token::BlockParen(BlockParen::Left),
+            BLOCK_RIGHT_PAREN => Token::BlockParen(BlockParen::Right),
+            COMMA => Token::COMMA,
+            END_OF_EXPRESSION => Token::EndOfExpression,
             _ => {
                 // 整数か浮動小数点数か判定
                 if let Ok(num) = token.parse::<i32>() {
@@ -260,7 +453,7 @@ impl Interpreter
                 } else if let Ok(num) = token.parse::<f32>() {
                     Token::Value(Value::Float(num))
                 } else {
-                    Token::Variable(token.to_string())
+                    Token::Identifier(token.to_string())
                 }
             }
         }
@@ -321,6 +514,16 @@ impl Interpreter
                     // コメントの場合はそれ以降の文字を無視
                     break;
                 }
+                ';' => {
+                    // ためていたトークンを追加
+                    if token.len() > 0 {
+                        result.push(token.clone());
+                        token.clear();
+                    }
+
+                    // ; を追加
+                    result.push(END_OF_EXPRESSION.to_string());
+                }
                 ' ' => {
                     // ためていたトークンを追加
                     if token.len() > 0 {
@@ -342,13 +545,15 @@ impl Interpreter
         result
     }
 
-    pub(crate) fn run_line(&mut self, mut tokens: &mut Vec<Token>)
-    {
-        self.equation(tokens);
-    }
-
     pub(crate) fn equation(&mut self, tokens: &mut Vec<Token>)
     {
+        // ; で終わっていることを確認
+        if let Some(Token::EndOfExpression) = tokens.last() {
+            tokens.remove(tokens.len() - 1);
+        } else {
+            panic!("式が ';' で終わっていません");
+        }
+
         // 変数一つだけの場合はそのまま表示
         if tokens.len() == 1 {
             self.variable(tokens.pop().unwrap());
@@ -356,6 +561,16 @@ impl Interpreter
             self.assignment(tokens);
         }
     }
+
+    fn check_end_of_expression(&self, t: Option<Token>) -> bool
+    {
+        match t
+        {
+            Some(Token::EndOfExpression) => true,
+            _ => panic!("式が ';' 終わっていません"),
+        }
+    }
+
 
     fn assignment(&mut self, tokens: &mut Vec<Token>)
     {
@@ -456,7 +671,7 @@ impl Interpreter
                     }
             }
 
-            if let Token::Variable(var) = first.clone()
+            if let Token::Identifier(var) = first.clone()
             {
                 result = Value::Int(comparison as i32);
             } else {
@@ -464,7 +679,7 @@ impl Interpreter
             }
         }
 
-        if let Token::Variable(var) = first
+        if let Token::Identifier(var) = first
         {
             self.variables.insert(var, result);
         } else {
@@ -475,7 +690,7 @@ impl Interpreter
     fn variable(&mut self, token: Token)
     {
         match token {
-            Token::Variable(ref var) => {
+            Token::Identifier(ref var) => {
                 if let Some(val) = self.variables.get(var) {
                     println!("{}", val);
                 } else {
@@ -654,6 +869,11 @@ impl Interpreter
                         tokens.push(op);
                         break;
                     }
+                Token::EndOfExpression =>
+                    {
+                        tokens.push(op);
+                        break;
+                    }
                 _ =>
                     {
                         panic!("演算子がありません : {}", op);
@@ -669,7 +889,7 @@ impl Interpreter
         match token
         {
             Token::Value(val) => val,
-            Token::Variable(var) =>
+            Token::Identifier(var) =>
                 {
                     if let Some(val) = self.variables.get(var.as_str())
                     {
@@ -752,19 +972,62 @@ mod tests {
     }
 
     #[test]
+    fn test_convert_function()
+    {
+        // 以下の関数をテスト
+        // func add(a, b) {
+        //     c = a + b
+        //     return c
+        // }
+
+        let mut function_tokens = vec![
+            Token::Function,
+            Token::Identifier("add".to_string()),
+            Token::OperatorParen(ArithmeticOperandParen::Left),
+            Token::Identifier("a".to_string()),
+            Token::COMMA,
+            Token::Identifier("b".to_string()),
+            Token::OperatorParen(ArithmeticOperandParen::Right),
+            Token::BlockParen(BlockParen::Left),
+            Token::Identifier("c".to_string()),
+            Token::Assign,
+            Token::Identifier("a".to_string()),
+            Token::OperatorHead(ArithmeticOperandHead::Plus),
+            Token::Identifier("b".to_string()),
+            Token::Return,
+            Token::Identifier("c".to_string()),
+            Token::BlockParen(BlockParen::Right),
+        ];
+        function_tokens.reverse();
+        let mut interpreter = Interpreter::new("");
+        let function = interpreter.convert_function(&mut function_tokens);
+        assert_eq!(function.name, "add");
+        assert_eq!(function.args, vec!["a", "b"]);
+        assert_eq!(function.body, vec![
+            Token::Identifier("c".to_string()),
+            Token::Assign,
+            Token::Identifier("a".to_string()),
+            Token::OperatorHead(ArithmeticOperandHead::Plus),
+            Token::Identifier("b".to_string()),
+            Token::Return,
+            Token::Identifier("c".to_string()),
+        ]);
+    }
+
+    #[test]
     fn test_comparison_equal_true() {
         let interpreter = run_program("
-            a = 5
-            b = 5
-            c = a == b
+            a = 5;
+            b = 5;
+            c = a == b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(1));
 
         // 浮動小数点数の比較
         let interpreter = run_program("
-            a = 5.5
-            b = 5.5
-            c = a == b
+            a = 5.5;
+            b = 5.5;
+            c = a == b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(1));
     }
@@ -772,17 +1035,17 @@ mod tests {
     #[test]
     fn test_comparison_equal_false() {
         let interpreter = run_program("
-            a = 5
-            b = 10
-            c = a == b
+            a = 5;
+            b = 10;
+            c = a == b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
 
         // 浮動小数点数の比較
         let interpreter = run_program("
-            a = 5.5
-            b = 5.6
-            c = a == b
+            a = 5.5;
+            b = 5.6;
+            c = a == b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
     }
@@ -790,34 +1053,34 @@ mod tests {
     #[test]
     fn test_comparison_not_equal_true() {
         let interpreter = run_program("
-            a = 5
-            b = 10
-            c = a != b
+            a = 5;
+            b = 10;
+            c = a != b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(1));
 
         // 浮動小数点数の比較
         let interpreter = run_program("
-            a = 5.5
-            b = 5.6
-            c = a != b
+            a = 5.5;
+            b = 5.6;
+            c = a != b;
         ");
     }
 
     #[test]
     fn test_comparison_not_equal_false() {
         let interpreter = run_program("
-            a = 5
-            b = 5
-            c = a != b
+            a = 5;
+            b = 5;
+            c = a != b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
 
         // 浮動小数点数の比較
         let interpreter = run_program("
-            a = 5.5
-            b = 5.5
-            c = a != b
+            a = 5.5;
+            b = 5.5;
+            c = a != b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
     }
@@ -825,17 +1088,17 @@ mod tests {
     #[test]
     fn test_comparison_greater_than_true() {
         let interpreter = run_program("
-            a = 10
-            b = 5
-            c = a > b
+            a = 10;
+            b = 5;
+            c = a > b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(1));
 
         // 浮動小数点数の比較
         let interpreter = run_program("
-            a = 10.5
-            b = 5.5
-            c = a > b
+            a = 10.5;
+            b = 5.5;
+            c = a > b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(1));
     }
@@ -843,17 +1106,17 @@ mod tests {
     #[test]
     fn test_comparison_greater_than_false() {
         let interpreter = run_program("
-            a = 5
-            b = 10
-            c = a > b
+            a = 5;
+            b = 10;
+            c = a > b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
 
         // 浮動小数点数の比較
         let interpreter = run_program("
-            a = 5.5
-            b = 10.5
-            c = a > b
+            a = 5.5;
+            b = 10.5;
+            c = a > b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
     }
@@ -861,17 +1124,17 @@ mod tests {
     #[test]
     fn test_comparison_less_than_true() {
         let interpreter = run_program("
-            a = 5
-            b = 10
-            c = a < b
+            a = 5;
+            b = 10;
+            c = a < b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(1));
 
         // 浮動小数点数の比較
         let interpreter = run_program("
-            a = 5.5
-            b = 10.5
-            c = a < b
+            a = 5.5;
+            b = 10.5;
+            c = a < b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(1));
     }
@@ -879,17 +1142,17 @@ mod tests {
     #[test]
     fn test_comparison_less_than_false() {
         let interpreter = run_program("
-            a = 10
-            b = 5
-            c = a < b
+            a = 10;
+            b = 5;
+            c = a < b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
 
         // 浮動小数点数の比較
         let interpreter = run_program("
-            a = 10.5
-            b = 5.5
-            c = a < b
+            a = 10.5;
+            b = 5.5;
+            c = a < b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
     }
@@ -897,17 +1160,17 @@ mod tests {
     #[test]
     fn test_comparison_greater_than_or_equal_true() {
         let interpreter = run_program("
-            a = 10
-            b = 5
-            c = a >= b
+            a = 10;
+            b = 5;
+            c = a >= b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(1));
 
         // 浮動小数点数の比較
         let interpreter = run_program("
-            a = 10.5
-            b = 5.5
-            c = a >= b
+            a = 10.5;
+            b = 5.5;
+            c = a >= b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(1));
     }
@@ -915,17 +1178,17 @@ mod tests {
     #[test]
     fn test_comparison_greater_than_or_equal_false() {
         let interpreter = run_program("
-            a = 5
-            b = 10
-            c = a >= b
+            a = 5;
+            b = 10;
+            c = a >= b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
 
         // 浮動小数点数の比較
         let interpreter = run_program("
-            a = 5.5
-            b = 10.5
-            c = a >= b
+            a = 5.5;
+            b = 10.5;
+            c = a >= b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
     }
@@ -933,34 +1196,34 @@ mod tests {
     #[test]
     fn test_comparison_less_than_or_equal_true() {
         let interpreter = run_program("
-            a = 5
-            b = 10
-            c = a <= b
+            a = 5;
+            b = 10;
+            c = a <= b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(1));
 
         // 浮動小数点数の比較
         let interpreter = run_program("
-            a = 5.5
-            b = 10.5
-            c = a <= b
+            a = 5.5;
+            b = 10.5;
+            c = a <= b;
         ");
     }
 
     #[test]
     fn test_comparison_less_than_or_equal_false() {
         let interpreter = run_program("
-            a = 10
-            b = 5
-            c = a <= b
+            a = 10;
+            b = 5;
+            c = a <= b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
 
         // 浮動小数点数の比較
         let interpreter = run_program("
-            a = 10.5
-            b = 5.5
-            c = a <= b
+            a = 10.5;
+            b = 5.5;
+            c = a <= b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(0));
     }
@@ -968,17 +1231,17 @@ mod tests {
     #[test]
     fn test_arithmetic_addition() {
         let interpreter = run_program("
-            a = 5
-            b = 10
-            c = a + b
+            a = 5;
+            b = 10;
+            c = a + b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(15));
 
         // 浮動小数点数の加算
         let interpreter = run_program("
-            x = 5.5
-            y = 10.5
-            z = x + y
+            x = 5.5;
+            y = 10.5;
+            z = x + y;
         ");
         assert_eq!(interpreter.variables.get("z").unwrap(), &Value::Float(16.0));
     }
@@ -986,17 +1249,17 @@ mod tests {
     #[test]
     fn test_arithmetic_subtraction() {
         let interpreter = run_program("
-            x = 20
-            y = 8
-            z = x - y
+            x = 20;
+            y = 8;
+            z = x - y;
         ");
         assert_eq!(interpreter.variables.get("z").unwrap(), &Value::Int(12));
 
         // 浮動小数点数の減算
         let interpreter = run_program("
-            x = 20.5
-            y = 8.5
-            z = x - y
+            x = 20.5;
+            y = 8.5;
+            z = x - y;
         ");
         assert_eq!(interpreter.variables.get("z").unwrap(), &Value::Float(12.0));
     }
@@ -1004,17 +1267,17 @@ mod tests {
     #[test]
     fn test_arithmetic_multiplication() {
         let interpreter = run_program("
-            m = 3
-            n = 7
-            p = m * n
+            m = 3;
+            n = 7;
+            p = m * n;
         ");
         assert_eq!(interpreter.variables.get("p").unwrap(), &Value::Int(21));
 
         // 浮動小数点数の乗算
         let interpreter = run_program("
-            m = 3.5
-            n = 7.5
-            p = m * n
+            m = 3.5;
+            n = 7.5;
+            p = m * n;
         ");
         assert_eq!(interpreter.variables.get("p").unwrap(), &Value::Float(26.25));
     }
@@ -1022,17 +1285,17 @@ mod tests {
     #[test]
     fn test_arithmetic_division() {
         let interpreter = run_program("
-            a = 20
-            b = 4
-            c = a / b
+            a = 20;
+            b = 4;
+            c = a / b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Int(5));
 
         // 浮動小数点数の除算
         let interpreter = run_program("
-            a = 20.5
-            b = 4.5
-            c = a / b
+            a = 20.5;
+            b = 4.5;
+            c = a / b;
         ");
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Float(4.5555553));
     }
@@ -1040,15 +1303,15 @@ mod tests {
     #[test]
     #[should_panic(expected = "変数がありません : undefined")]
     fn test_variable_not_found() {
-        let _interpreter = run_program("undefined");
+        let _interpreter = run_program("undefined;");
     }
 
     #[test]
     #[should_panic(expected = "代入演算子がありません")]
     fn test_invalid_operator() {
         let _interpreter = run_program("
-            a = 5
-            a +
+            a = 5;
+            a +;
         ");
     }
 
@@ -1056,16 +1319,16 @@ mod tests {
     #[should_panic(expected = "0で割ることはできません")]
     fn test_division_by_zero() {
         let _interpreter = run_program("
-            a = 10
-            b = 0
-            c = a / b
+            a = 10;
+            b = 0;
+            c = a / b;
         ");
     }
 
     #[test]
     fn test_parentheses_operation() {
         let interpreter = run_program("
-        a = (1 + 2) * 3
+        a = (1 + 2) * 3;
     ");
         assert_eq!(interpreter.variables.get("a").unwrap(), &Value::Int(9));
     }
@@ -1073,7 +1336,7 @@ mod tests {
     #[test]
     fn test_nested_parentheses_operation() {
         let interpreter = run_program("
-        a = ((2 + 3) * (4 - 1)) / 5
+        a = ((2 + 3) * (4 - 1)) / 5;
     ");
         assert_eq!(interpreter.variables.get("a").unwrap(), &Value::Int(3));
     }
@@ -1087,16 +1350,16 @@ mod tests {
     #[test]
     #[should_panic(expected = "括弧の数が正しくありません : a = 1 + 2) * 3")]
     fn test_unmatched_right_parenthesis() {
-        let _interpreter = run_program("a = 1 + 2) * 3");
+        let _interpreter = run_program("a = 1 + 2) * 3;");
     }
 
     #[test]
     fn test_comments() {
         let interpreter = run_program("
-        a = 5 # this is a comment
-        b = 10
-        # c = a + b
-        d = a * b # this is another comment
+        a = 5;# this is a comment
+        b = 10;
+        # c = a + b;
+        d = a * b; # this is another comment
     ");
         assert_eq!(interpreter.variables.get("a").unwrap(), &Value::Int(5));
         assert_eq!(interpreter.variables.get("b").unwrap(), &Value::Int(10));
@@ -1107,12 +1370,12 @@ mod tests {
     fn test_float_and_int()
     {
         let interpreter = run_program("
-            a = 5
-            b = 5.5
-            c = a + b
-            d = a * b
-            e = a / b
-            f = a - b
+            a = 5;
+            b = 5.5;
+            c = a + b;
+            d = a * b;
+            e = a / b;
+            f = a - b;
         ");
 
         assert_eq!(interpreter.variables.get("c").unwrap(), &Value::Float(10.5));
@@ -1125,25 +1388,25 @@ mod tests {
     #[should_panic(expected = "整数型以外の演算はできません")]
     fn test_invalid_operation() {
         let _interpreter = run_program("
-            a = 5
-            b = 5.5
-            c = a % b
+            a = 5;
+            b = 5.5;
+            c = a % b;
         ");
     }
 
     #[test]
     fn test_int_operations() {
         let interpreter = run_program("
-            a = 5
-            b = 10
-            c = (a + b) * 2
-            d = c / 5
-            e = d - 3
-            f = e % 2
-            g = f == 0
-            h = (a * b) > (c / 2)
-            i = (a + b) <= (c - d)
-            j = (((1+1)))
+            a = 5;
+            b = 10;
+            c = (a + b) * 2;
+            d = c / 5;
+            e = d - 3;
+            f = e % 2;
+            g = f == 0;
+            h = (a * b) > (c / 2);
+            i = (a + b) <= (c - d);
+            j = (((1+1)));
         ");
 
         assert_eq!(interpreter.variables.get("a").unwrap(), &Value::Int(5));
@@ -1161,16 +1424,16 @@ mod tests {
     #[test]
     fn test_float_operations() {
         let interpreter = run_program("
-        a = 5.5
-        b = 10.2
-        c = (a + b) * 2.0
-        d = c / 5.1
-        e = d - 3.3
-        f = e / 2.2
-        g = f == 0.0
-        h = (a * b) > (c / 2.0)
-        i = (a + b) <= (c - d)
-        j = (((1.1 + 1.1)))
+        a = 5.5;
+        b = 10.2;
+        c = (a + b) * 2.0;
+        d = c / 5.1;
+        e = d - 3.3;
+        f = e / 2.2;
+        g = f == 0.0;
+        h = (a * b) > (c / 2.0);
+        i = (a + b) <= (c - d);
+        j = (((1.1 + 1.1)));
     ");
 
         assert_eq!(interpreter.variables.get("a").unwrap(), &Value::Float(5.5));
