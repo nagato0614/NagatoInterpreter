@@ -209,7 +209,32 @@ impl Function
 
     fn run(&mut self, arguments: Vec<Value>) -> Value
     {
-        Value::Int(0)
+        let mut tokens_list = Vec::new();
+        // ; 区切りでトークン列を作成
+        let mut tokens = Vec::new();
+        for token in self.body.clone() {
+            println!("{}", token);
+            match token {
+                Token::EndOfExpression => {
+                    tokens.push(token);
+                    tokens_list.push(tokens.clone());
+                    tokens.clear();
+                }
+                _ => {
+                    tokens.push(token);
+                }
+            }
+        }
+
+        let mut interpreter = Interpreter::new(tokens_list);
+        // 仮引数を関数内の変数に代入
+        for (i, arg) in arguments.iter().enumerate() {
+            interpreter.variables.insert(self.args[i].clone(), arg.clone());
+        }
+
+        let result = interpreter.run();
+
+        result
     }
 }
 fn check_parentheses(tokens: &Vec<Token>) -> bool
@@ -236,7 +261,6 @@ fn check_block_parentheses(tokens: &Vec<Token>) -> bool
         }
     }
 
-    println!("count : {}", count);
     count == 0
 }
 
@@ -252,7 +276,9 @@ pub fn runtime(contents: &str)
     let mut tokens_list = parser.convert_token_list();
 
     let mut interpreter = Interpreter::new(tokens_list);
-    interpreter.run();
+    let result = interpreter.run();
+
+    println!("{}", result);
 }
 
 pub struct Parser
@@ -421,6 +447,12 @@ impl Parser
     }
 }
 
+enum EquationResult
+{
+    Continue,
+    Return(Value),
+}
+
 pub struct Interpreter
 {
     variables: HashMap<String, Value>,
@@ -451,18 +483,18 @@ impl Interpreter
         }
     }
 
-    pub fn run(&mut self)
+    pub fn run(&mut self) -> Value
     {
-        self.run_lines();
-    }
-
-    fn run_lines(&mut self)
-    {
+        let mut result = Value::Int(0);
         for mut tokens in self.tokens_list.clone() {
-            self.equation(&mut tokens);
+            let return_state = self.equation(&mut tokens);
+            if let EquationResult::Return(val) = return_state {
+                result = val;
+                break;
+            }
         }
+        result
     }
-
 
     fn extract_functions(&mut self)
     {
@@ -539,7 +571,6 @@ impl Interpreter
 
         // 関数の引数を取得. ) が見つかるまで繰り返す
         while let Some(token) = tokens.pop() {
-            println!("In while loop : {}", token);
             match token {
                 Token::OperatorParen(ArithmeticOperandParen::Left) => {}
                 Token::OperatorParen(ArithmeticOperandParen::Right) => {
@@ -573,9 +604,7 @@ impl Interpreter
     }
 
 
-
-
-    pub(crate) fn equation(&mut self, tokens: &mut Vec<Token>)
+    pub(crate) fn equation(&mut self, tokens: &mut Vec<Token>) -> EquationResult
     {
         // ; で終わっていることを確認
         if let Some(Token::EndOfExpression) = tokens.last() {
@@ -587,10 +616,22 @@ impl Interpreter
         // 変数一つだけの場合はそのまま表示
         if tokens.len() == 1 {
             self.variable(tokens.pop().unwrap());
+            EquationResult::Continue
         } else {
-            self.assignment(tokens);
+            // 先頭の token が return の場合
+            if let Some(Token::Return) = tokens.first() {
+                let mut return_tokens = tokens.clone();
+                return_tokens.remove(0);
+
+                EquationResult::Return(self.arithmetic_equation(&mut return_tokens))
+            } else {
+                self.assignment(tokens);
+                EquationResult::Continue
+            }
         }
     }
+
+
 
     fn check_end_of_expression(&self, t: Option<Token>) -> bool
     {
@@ -1006,8 +1047,8 @@ mod tests {
     {
         // 以下の関数をテスト
         // func add(a, b) {
-        //     c = a + b
-        //     return c
+        //     c = a + b;
+        //     return c;
         // }
         let mut mock_tokens = vec![
             vec![],
@@ -1027,8 +1068,10 @@ mod tests {
             Token::Identifier("a".to_string()),
             Token::OperatorHead(ArithmeticOperandHead::Plus),
             Token::Identifier("b".to_string()),
+            Token::EndOfExpression,
             Token::Return,
             Token::Identifier("c".to_string()),
+            Token::EndOfExpression,
             Token::BlockParen(BlockParen::Right),
         ];
         function_tokens.reverse();
@@ -1042,8 +1085,10 @@ mod tests {
             Token::Identifier("a".to_string()),
             Token::OperatorHead(ArithmeticOperandHead::Plus),
             Token::Identifier("b".to_string()),
+            Token::EndOfExpression,
             Token::Return,
             Token::Identifier("c".to_string()),
+            Token::EndOfExpression,
         ]);
 
         // 関数を実行

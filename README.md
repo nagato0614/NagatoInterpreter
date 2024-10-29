@@ -11,6 +11,7 @@ Rust 勉強のため自作言語用のインタプリタを作成する
     d;
     e = (1 + 1) / 2;
     e;
+    return e;
 ```
 
  - 型はすべて32bit int とする.
@@ -25,12 +26,14 @@ Rust 勉強のため自作言語用のインタプリタを作成する
  - '#' 以降はコメントとして無視される
  - 固定長の引数を取る関数を定義することができる
  - 式の最後には必ずセミコロン ';' をつけること
+ - return を実行すると, その時点で処理を終了し, return の後ろの値を返す
+ - return は関数内では最後に一つ書く必要がある. それ以外の場所に書いた場合はそこで処理を終了する.
 
 ## 関数の例
 関数は以下のように定義することができる
 ```
     func(a) {
-        return = a + 1
+        return a + 1
     }
     a = 1
     b = func(a)
@@ -78,7 +81,7 @@ Rust 勉強のため自作言語用のインタプリタを作成する
 - Arithmetic Equation (AE) : 算術式 
 - Arithmetic operand (AO) : 算術演算オペランド (+, -, *, /, %)
 ```
-  Equation ::= Identifier ';' | Assignment ';'
+  Equation ::= Identifier ';' | Assignment ';' | ReturnStatement ';'
   Assignment ::= Identifier '=' ArithmeticEquation
                | Identifier '=' FunctionCall
                | Identifier '=' Comparison
@@ -86,8 +89,8 @@ Rust 勉強のため自作言語用のインタプリタを作成する
   Comparison ::= ArithmeticEquation ComparisonOperator ArithmeticEquation
  
   Function ::= "func" Identifier '(' Equation ')' Block
-  Block ::= '{' Statement* ReturnStatement '}'
-  Statement ::= Equation | FunctionCall
+  Block ::= '{' (Statement ';')* ReturnStatement ';'}'
+  Statement ::= Identifier ';' | Assignment ';'
   FunctionCall ::= Identifier '(' Arguments ')'
   Arguments ::= [Variable] (',' [Variable])*
   ReturnStatement ::= "return" Identifier
