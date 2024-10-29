@@ -33,11 +33,11 @@ Rust 勉強のため自作言語用のインタプリタを作成する
 関数は以下のように定義することができる
 ```
     func(a) {
-        return a + 1
+        return a + 1;
     }
-    a = 1
-    b = func(a)
-    b
+    a = 1;
+    b = func(a);
+    b;
 ```
 
 引数としてaを受取り, a+1 の結果を返す.
@@ -46,10 +46,10 @@ Rust 勉強のため自作言語用のインタプリタを作成する
 
 また, 1行で記述も可能
 ```
-    func(a) { return a + 1 } 
-    a = 1 
-    b = func(a) 
-    b
+    func(a) { return a + 1; } 
+    a = 1 ;
+    b = func(a) ;
+    b;
 ```
 
 波括弧は省略できず, 以下のような処理はできない
@@ -59,7 +59,7 @@ Rust 勉強のため自作言語用のインタプリタを作成する
 
 関数の引数は複数指定することができる
 ```
-    func(a, b) { return a + b }
+    func(a, b) { return a + b; }
     a = 1
     b = 2
     c = func(a, b)
@@ -68,10 +68,10 @@ Rust 勉強のため自作言語用のインタプリタを作成する
 
 一つの引数内に関数呼び出しは不可能
 ```エラー
-    func(a) { return a + 1 }
-    a = 1
-    b = func(func(a))
-    b
+    func(a) { return a + 1; }
+    a = 1;
+    b = func(func(a));
+    b;
 ```
 
 ## Backus Naur Form

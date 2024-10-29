@@ -213,7 +213,6 @@ impl Function
         // ; 区切りでトークン列を作成
         let mut tokens = Vec::new();
         for token in self.body.clone() {
-            println!("{}", token);
             match token {
                 Token::EndOfExpression => {
                     tokens.push(token);
@@ -232,6 +231,7 @@ impl Function
             interpreter.variables.insert(self.args[i].clone(), arg.clone());
         }
 
+        // 関数を実行
         let result = interpreter.run();
 
         result
@@ -361,6 +361,17 @@ impl Parser
                     // ; を追加
                     result.push(END_OF_EXPRESSION.to_string());
                 }
+                ',' =>
+                    {
+                        // ためていたトークンを追加
+                        if token.len() > 0 {
+                            result.push(token.clone());
+                            token.clear();
+                        }
+
+                        // , を追加
+                        result.push(COMMA.to_string());
+                    }
                 ' ' => {
                     // ためていたトークンを追加
                     if token.len() > 0 {
@@ -404,6 +415,8 @@ impl Parser
             BLOCK_RIGHT_PAREN => Token::BlockParen(BlockParen::Right),
             COMMA => Token::COMMA,
             END_OF_EXPRESSION => Token::EndOfExpression,
+            FUNCTION => Token::Function,
+            RETURN => Token::Return,
             _ => {
                 // 整数か浮動小数点数か判定
                 if let Ok(num) = token.parse::<i32>() {
@@ -498,43 +511,54 @@ impl Interpreter
 
     fn extract_functions(&mut self)
     {
+        // 新しいトークン列を作成し最終的にはこれを元のトークン列に置き換える
+        let mut new_tokens_list = Vec::new();
         let mut function_tokens: Vec<Token> = Vec::new();
         let mut i = 0;
 
+        // トークン列を走査して関数を抽出
         while i < self.tokens_list.len() {
             let tokens = self.tokens_list[i].clone();
 
             // token列にfuncが含まれている場合は関数を抽出し, 行を削除
-            if tokens.contains(&Token::Function) {
-                let mut line = tokens.clone();
-                for line in line {
+            if let Some(Token::Function) = tokens.first() {
+                for line in tokens.clone() {
                     function_tokens.push(line);
-                }
-                self.tokens_list.remove(i);
-            }
-
-            // この列に } が含まれている場合は見つかるまで行を追加する
-            while i < self.tokens_list.len() {
-                let mut line = tokens.clone();
-                for line in line {
-                    function_tokens.push(line);
-                }
-                if tokens.contains(&Token::BlockParen(BlockParen::Right)) {
-                    break;
                 }
                 i += 1;
+
+                // この列に } が含まれている行を見つけるまで関数のトークンを追加
+                while i < self.tokens_list.len() {
+
+                    // 関数の終了を確認
+                    if function_tokens.contains(&Token::BlockParen(BlockParen::Right)) {
+                        break;
+                    }
+
+                    let tokens = self.tokens_list[i].clone();
+                    let mut line = tokens.clone();
+                    for line in line {
+                        function_tokens.push(line);
+                    }
+
+                    i += 1;
+                }
+
+                // 関数を変換
+                let function = self.convert_function(&mut function_tokens);
+                self.functions.insert(function.name.clone(), function);
+
+                function_tokens.clear();
+            } else {
+                println!("関数が見つかりません");
+                new_tokens_list.push(tokens);
             }
 
-            // 関数を変換
-            let function = self.convert_function(&mut function_tokens);
-            self.functions.insert(function.name.clone(), function);
-
-            function_tokens.clear();
             i += 1;
         }
+
+        self.tokens_list = new_tokens_list;
     }
-
-
 
     fn convert_function(&mut self, mut tokens: &mut Vec<Token>) -> Function
     {
@@ -542,10 +566,7 @@ impl Interpreter
         let mut args = Vec::new();
         let mut body = Vec::new();
 
-
-        for token in tokens.clone() {
-            println!("{}", token);
-        }
+        tokens.reverse();
 
         // {, } の数が正しいか確認
         if !check_block_parentheses(tokens) {
@@ -630,7 +651,6 @@ impl Interpreter
             }
         }
     }
-
 
 
     fn check_end_of_expression(&self, t: Option<Token>) -> bool
@@ -1043,57 +1063,68 @@ mod tests {
     }
 
     #[test]
-    fn test_convert_function()
+    fn test_extract_function()
     {
-        // 以下の関数をテスト
-        // func add(a, b) {
-        //     c = a + b;
-        //     return c;
-        // }
-        let mut mock_tokens = vec![
-            vec![],
-        ];
+        let source_code = "
+            func add(a, b) {
+                c = a + b;
+                return c;
+            }
+        ";
 
-        let mut function_tokens = vec![
-            Token::Function,
-            Token::Identifier("add".to_string()),
-            Token::OperatorParen(ArithmeticOperandParen::Left),
-            Token::Identifier("a".to_string()),
-            Token::COMMA,
-            Token::Identifier("b".to_string()),
-            Token::OperatorParen(ArithmeticOperandParen::Right),
-            Token::BlockParen(BlockParen::Left),
-            Token::Identifier("c".to_string()),
-            Token::Assign,
-            Token::Identifier("a".to_string()),
-            Token::OperatorHead(ArithmeticOperandHead::Plus),
-            Token::Identifier("b".to_string()),
-            Token::EndOfExpression,
-            Token::Return,
-            Token::Identifier("c".to_string()),
-            Token::EndOfExpression,
-            Token::BlockParen(BlockParen::Right),
-        ];
-        function_tokens.reverse();
-        let mut interpreter = Interpreter::new(mock_tokens.clone());
-        let mut function = interpreter.convert_function(&mut function_tokens);
-        assert_eq!(function.name, "add");
-        assert_eq!(function.args, vec!["a", "b"]);
-        assert_eq!(function.body, vec![
-            Token::Identifier("c".to_string()),
-            Token::Assign,
-            Token::Identifier("a".to_string()),
-            Token::OperatorHead(ArithmeticOperandHead::Plus),
-            Token::Identifier("b".to_string()),
-            Token::EndOfExpression,
-            Token::Return,
-            Token::Identifier("c".to_string()),
-            Token::EndOfExpression,
-        ]);
+        let mut parser = Parser::new(source_code);
+        let mut tokens_list = parser.convert_token_list();
 
-        // 関数を実行
-        let result = function.run(vec![Value::Int(5), Value::Int(10)]);
-        assert_eq!(result, Value::Int(15));
+        let flat_tokens: Vec<Token> = tokens_list.iter().flat_map(|x| x.clone()).collect();
+        assert_eq!(
+            flat_tokens,
+            vec![
+                Token::Function,
+                Token::Identifier("add".to_string()),
+                Token::OperatorParen(ArithmeticOperandParen::Left),
+                Token::Identifier("a".to_string()),
+                Token::COMMA,
+                Token::Identifier("b".to_string()),
+                Token::OperatorParen(ArithmeticOperandParen::Right),
+                Token::BlockParen(BlockParen::Left),
+                Token::Identifier("c".to_string()),
+                Token::Assign,
+                Token::Identifier("a".to_string()),
+                Token::OperatorHead(ArithmeticOperandHead::Plus),
+                Token::Identifier("b".to_string()),
+                Token::EndOfExpression,
+                Token::Return,
+                Token::Identifier("c".to_string()),
+                Token::EndOfExpression,
+                Token::BlockParen(BlockParen::Right),
+            ]
+        );
+
+        let mut interpreter = Interpreter::new(tokens_list);
+        interpreter.extract_functions();
+
+        if let Some(function) = interpreter.functions.get_mut("add")
+        {
+            assert_eq!(function.name, "add");
+            assert_eq!(function.args, vec!["a", "b"]);
+            assert_eq!(function.body, vec![
+                Token::Identifier("c".to_string()),
+                Token::Assign,
+                Token::Identifier("a".to_string()),
+                Token::OperatorHead(ArithmeticOperandHead::Plus),
+                Token::Identifier("b".to_string()),
+                Token::EndOfExpression,
+                Token::Return,
+                Token::Identifier("c".to_string()),
+                Token::EndOfExpression,
+            ]);
+
+            // 関数を実行
+            let result =  function.run(vec![Value::Int(5), Value::Int(10)]);
+            assert_eq!(result, Value::Int(15));
+        } else {
+            panic!("関数がありません");
+        }
     }
 
     #[test]
