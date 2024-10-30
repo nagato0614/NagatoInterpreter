@@ -545,6 +545,10 @@ impl Interpreter
                 while i < self.tokens_list.len() {
                     i += 1;
 
+                    if i >= self.tokens_list.len() { // ここで範囲外アクセスを回避するためにチェックを追加
+                        panic!("関数の終わりである }} が見つけられませんでした");
+                    }
+
                     let tokens = self.tokens_list[i].clone();
                     let mut line = tokens.clone();
                     for line in line {
@@ -1215,9 +1219,6 @@ mod tests {
             # 関数の引数に変数を使用
             j = add(a, h);      # j = 100 + 16 = 116
 
-            # エラーハンドリング: 0除算
-            # k = 1 / 0; # エラーが発生するのでコメントアウト
-
             # 最後に評価した値を取得
             return j;
         ");
@@ -1235,5 +1236,67 @@ mod tests {
             assert_eq!(interpreter.get_variable("j"), Value::Int(116));
         }
     }
+}
 
+#[cfg(test)]
+mod error_tests {
+    use super::*;
+
+    fn run_program(program: &str) -> Interpreter {
+        let mut parser = Parser::new(program);
+        let tokens_list = parser.convert_token_list();
+        let mut interpreter = Interpreter::new(tokens_list);
+        interpreter.run();
+        interpreter
+    }
+
+    #[test]
+    #[should_panic(expected = "0で割ることはできません")]
+    fn test_division_by_zero() {
+        let _interpreter = run_program("
+            a = 10;
+            b = 0;
+            c = a / b;
+        ");
+    }
+
+    #[test]
+    #[should_panic(expected = "変数がありません : undefined")]
+    fn test_undefined_variable() {
+        let _interpreter = run_program("a = undefined + 1;");
+    }
+
+    #[test]
+    #[should_panic(expected = "代入演算子がありません")]
+    fn test_invalid_operator_usage() {
+        let _interpreter = run_program("
+            a = 5;
+            a +;
+        ");
+    }
+
+    #[test]
+    #[should_panic(expected = "括弧の数が正しくありません : a = (1 + 2 * 3;")]
+    fn test_unmatched_parentheses() {
+        let _interpreter = run_program("a = (1 + 2 * 3;");
+    }
+
+    #[test]
+    #[should_panic(expected = "整数型以外の演算はできません")]
+    fn test_invalid_modulo_operation() {
+        let _interpreter = run_program("
+            a = 5;
+            b = 2.5;
+            c = a % b;
+        ");
+    }
+
+    #[test]
+    #[should_panic(expected = "関数の終わりである } が見つけられませんでした")]
+    fn test_invalid_block_structure() {
+        let _interpreter = run_program("
+            func invalid() {
+                a = 10;
+            ");
+    }
 }
