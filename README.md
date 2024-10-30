@@ -83,7 +83,6 @@ Rust 勉強のため自作言語用のインタプリタを作成する
 ```
   Equation ::= Identifier ';' | Assignment ';' | ReturnStatement ';'
   Assignment ::= Identifier '=' ArithmeticEquation
-               | Identifier '=' FunctionCall
                | Identifier '=' Comparison
                
   Comparison ::= ArithmeticEquation ComparisonOperator ArithmeticEquation
@@ -97,7 +96,7 @@ Rust 勉強のため自作言語用のインタプリタを作成する
   
   ArithmeticEquation ::= Term | Term ArithmeticOperandHead Term
   Term ::= Factor | Factor ArithmeticOperandTail Factor
-  Factor ::= Value | Identifier | '(' ArithmeticEquation ')'
+  Factor ::= Value | Identifier | '(' ArithmeticEquation ')' | FunctionCall
   ArithmeticOperandHead ::= + | -
   ArithmeticOperandTail ::= * | / | %  
   ArithmeticOperandParen ::= ( | )
