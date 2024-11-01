@@ -660,8 +660,11 @@ impl Interpreter
             if let Some(Token::Return) = tokens.first() {
                 let mut return_tokens = tokens.clone();
                 return_tokens.remove(0);
+                return_tokens.reverse();
 
-                EquationResult::Return(self.arithmetic_equation(&mut return_tokens))
+                let result = self.expression(&mut return_tokens);
+
+                EquationResult::Return(result)
             } else {
                 self.assignment(tokens);
                 EquationResult::Continue
@@ -696,8 +699,8 @@ impl Interpreter
                 }
         }
 
-        let mut result = self.expression(tokens);
-        
+        let result = self.expression(tokens);
+
         // 代入先が変数であることを確認
         match first
         {
@@ -711,7 +714,7 @@ impl Interpreter
                 }
         }
     }
-    
+
     fn expression(&mut self, tokens: &mut Vec<Token>) -> Value
     {
         let mut result = self.arithmetic_equation(tokens);
@@ -796,15 +799,12 @@ impl Interpreter
                         panic!("比較演算子がありません : {}", op);
                     }
             }
-            
+
             result = Value::Int(comparison as i32);
             result
-        }
-        else 
-        { 
+        } else {
             result
         }
-
     }
 
     fn variable(&mut self, token: Token)
@@ -896,6 +896,7 @@ impl Interpreter
         }
 
         let mut result = self.factor(tokens);
+
         while tokens.len() > 0
         {
             let op = tokens.pop().unwrap();
@@ -1103,7 +1104,7 @@ mod tests {
 
     fn run_program(program: &str) -> Interpreter {
         let mut parser = Parser::new(program);
-        let mut tokens_list = parser.convert_token_list();
+        let tokens_list = parser.convert_token_list();
         let mut interpreter = Interpreter::new(tokens_list);
         interpreter.run();
         interpreter
@@ -1178,18 +1179,27 @@ mod tests {
     fn test_run_function()
     {
         let source_code = "
-            func add(a, b) {
-                c = a + b;
-                return c;
+            func average(a, b, c, d) {
+                sum = a + b + c + d;
+                return sum / 4;
             }
-
-            d = add(5, 10);
+            a = 10;
+            b = 15;
+            c = 20;
+            d = 25;
+            result = average(a, b, c, d);
         ";
 
         let interpreter = run_program(source_code);
-        let result = interpreter.get_variable("d");
-        assert_eq!(result, Value::Int(15));
+        assert_eq!(interpreter.get_variable("a"), Value::Int(10));
+        assert_eq!(interpreter.get_variable("b"), Value::Int(15));
+        assert_eq!(interpreter.get_variable("c"), Value::Int(20));
+        assert_eq!(interpreter.get_variable("d"), Value::Int(25));
+
+        assert_eq!(interpreter.get_variable("result"), Value::Int(17));
+
     }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -1230,7 +1240,7 @@ mod tests {
             # 関数の引数に変数を使用
             j = add(a, h);      # j = 100 + 16 = 116
 
-            k = add(1, 1);      # k = 2
+            k = (1 + 2 + 3 + 4) / 4;
 
             # 最後に評価した値を取得
             return k;

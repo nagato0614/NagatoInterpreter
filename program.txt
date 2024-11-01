@@ -1,7 +1,6 @@
 func average(a, b, c, d) {
     sum = a + b + c + d;
-    sum = sum / 4;
-    return sum;
+    return sum / 4;
 }
 
 a = 10;
@@ -10,3 +9,4 @@ c = 20;
 d = 25;
 result = average(a, b, c, d);
 result;
+
