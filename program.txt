@@ -1,5 +1,12 @@
-a=(1+1)*4/2
-b = 2
-c = a + b
-d = c == 6
-d
+func average(a, b, c, d) {
+    sum = a + b + c + d;
+    sum = sum / 4;
+    return sum;
+}
+
+a = 10;
+b = 15;
+c = 20;
+d = 25;
+result = average(a, b, c, d);
+result;

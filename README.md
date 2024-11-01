@@ -32,11 +32,12 @@ Rust 勉強のため自作言語用のインタプリタを作成する
 ## 関数の例
 関数は以下のように定義することができる
 ```
-    func(a) {
-        return a + 1;
+    func f(a) {
+        b = a + 1;
+        return b;
     }
     a = 1;
-    b = func(a);
+    b = f(a);
     b;
 ```
 
@@ -44,25 +45,20 @@ Rust 勉強のため自作言語用のインタプリタを作成する
 関数内には必ずreturn文を記述すること.
 関数内の変数は関数内でのみ有効で,外部変数は取り扱わない
 
-また, 1行で記述も可能
-```
-    func(a) { return a + 1; } 
-    a = 1 ;
-    b = func(a) ;
-    b;
-```
-
 波括弧は省略できず, 以下のような処理はできない
 ```:エラー
-    func(a) return a + 1
+    func add(a) return a + 1
 ```
 
 関数の引数は複数指定することができる
 ```
-    func(a, b) { return a + b; }
+    func add(a, b) {
+     c = a + b
+     return c;
+    }
     a = 1
     b = 2
-    c = func(a, b)
+    c = add(a, b)
     c
 ```
 
@@ -81,18 +77,19 @@ Rust 勉強のため自作言語用のインタプリタを作成する
 - Arithmetic Equation (AE) : 算術式 
 - Arithmetic operand (AO) : 算術演算オペランド (+, -, *, /, %)
 ```
+  Statement ::= Equation | Function
   Equation ::= Identifier ';' | Assignment ';' | ReturnStatement ';'
-  Assignment ::= Identifier '=' ArithmeticEquation
-               | Identifier '=' Comparison
-               
+  Assignment ::= Identifier '=' Expression
+  Expression ::= ArithmeticEquation | Comparison | FunctionCall
   Comparison ::= ArithmeticEquation ComparisonOperator ArithmeticEquation
  
-  Function ::= "func" Identifier '(' Equation ')' Block
+  Function ::= "func" Identifier '(' Arguments ')' Block
   Block ::= '{' (Statement ';')* ReturnStatement ';'}'
   Statement ::= Identifier ';' | Assignment ';'
-  FunctionCall ::= Identifier '(' Arguments ')'
+  FunctionCall ::= Identifier '(' CallArgument ')'
   Arguments ::= [Variable] (',' [Variable])*
-  ReturnStatement ::= "return" Identifier
+　CallArguments ::= [CallArgument] (',' [CallArgument])*
+  ReturnStatement ::= "return" Expression
   
   ArithmeticEquation ::= Term | Term ArithmeticOperandHead Term
   Term ::= Factor | Factor ArithmeticOperandTail Factor

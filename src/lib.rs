@@ -283,8 +283,6 @@ pub fn runtime(contents: &str)
 
     let mut interpreter = Interpreter::new(tokens_list);
     let result = interpreter.run();
-
-    println!("{}", result);
 }
 
 pub struct Parser
@@ -507,14 +505,9 @@ impl Interpreter
         // 関数を抽出
         self.extract_functions();
 
-        // 残りのtokenを表示
+        let mut i = 0;
         for mut tokens in self.tokens_list.clone() {
-            for token in tokens.clone() {
-                println!("run : {:?}", token);
-            }
-        }
-
-        for mut tokens in self.tokens_list.clone() {
+            i += 1;
             let return_state = self.equation(&mut tokens);
             if let EquationResult::Return(val) = return_state {
                 result = val;
@@ -547,6 +540,11 @@ impl Interpreter
 
                     if i >= self.tokens_list.len() { // ここで範囲外アクセスを回避するためにチェックを追加
                         panic!("関数の終わりである }} が見つけられませんでした");
+                    }
+
+                    // 関数の終了を確認
+                    if function_tokens.contains(&Token::BlockParen(BlockParen::Right)) {
+                        break;
                     }
 
                     let tokens = self.tokens_list[i].clone();
@@ -698,6 +696,24 @@ impl Interpreter
                 }
         }
 
+        let mut result = self.expression(tokens);
+        
+        // 代入先が変数であることを確認
+        match first
+        {
+            Token::Identifier(var) =>
+                {
+                    self.identifiers.insert(var, Identifier::Variable(result));
+                }
+            _ =>
+                {
+                    panic!("代入先が変数ではありません : {}", first);
+                }
+        }
+    }
+    
+    fn expression(&mut self, tokens: &mut Vec<Token>) -> Value
+    {
         let mut result = self.arithmetic_equation(tokens);
 
         // 比較演算子が残っている場合
@@ -780,21 +796,15 @@ impl Interpreter
                         panic!("比較演算子がありません : {}", op);
                     }
             }
-
-            if let Token::Identifier(var) = first.clone()
-            {
-                result = Value::Int(comparison as i32);
-            } else {
-                panic!("変数がありません : {}", first);
-            }
+            
+            result = Value::Int(comparison as i32);
+            result
+        }
+        else 
+        { 
+            result
         }
 
-        if let Token::Identifier(var) = first
-        {
-            self.identifiers.insert(var, Identifier::Variable(result));
-        } else {
-            panic!("変数がありません : {}", first);
-        }
     }
 
     fn variable(&mut self, token: Token)
@@ -1103,7 +1113,8 @@ mod tests {
     fn test_extract_function()
     {
         let source_code = "
-            func add(a, b) { c = a + b;
+            func add(a, b) {
+                c = a + b;
                 return c;
             }
         ";
@@ -1219,8 +1230,13 @@ mod tests {
             # 関数の引数に変数を使用
             j = add(a, h);      # j = 100 + 16 = 116
 
+            k = add(1, 1);      # k = 2
+
             # 最後に評価した値を取得
-            return j;
+            return k;
+
+            # ここには到達しない
+            l = 100;
         ");
 
             // テスト結果の検証
@@ -1234,6 +1250,10 @@ mod tests {
             assert_eq!(interpreter.get_variable("h"), Value::Int(16));
             assert_eq!(interpreter.get_variable("i"), Value::Int(3));
             assert_eq!(interpreter.get_variable("j"), Value::Int(116));
+            assert_eq!(interpreter.get_variable("k"), Value::Int(2));
+
+            // k は見つからないことを確認
+            assert_eq!(interpreter.identifiers.get("l"), None);
         }
     }
 }
