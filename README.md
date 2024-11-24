@@ -3,6 +3,54 @@
 Rust 勉強のため自作言語用のインタプリタを作成する.
 c言語をベースとして一部仕様を切り取っている.
 
+## プログラムの例
+
+```c
+int add(int a, int b) {
+    int result;
+    result = a + b;
+    return result;
+}
+
+float multiply(float x, float y) {
+    float product = x * y;
+    return product;
+}
+
+void print_numbers(int n) {
+    int i = 0;
+    while (i < n) {
+        i = i + 1;
+        continue;
+    }
+}
+
+int main() {
+    int sum;
+    float product;
+    sum = add(5, 10);
+    product = multiply(2.5, 4.0);
+
+    if (sum > 10) {
+        sum = sum - 1;
+    } else {
+        sum = sum + 1;
+    }
+
+    print_numbers(5);
+    
+    if (sum > 10) {
+        return 1;
+    } else if (sum <= 10) {
+        return 2;
+    } else {
+        return 0;
+    }
+}
+
+```
+
+
 ## 仕様
 
 基本的にはC言語の仕様をベースにしているが, 以下の点が異なる.
@@ -28,7 +76,7 @@ c言語をベースとして一部仕様を切り取っている.
 {
     tokens=[
          space='regexp:\s+'
-         identifier='regexp:[a_zA_Z][a_zA_Z0_9_]*'
+         identifier='regexp:[a-zA-Z_][a-zA-Z0-9_]*'
 
          integer_constant='regexp:\d+'
          floating_constant='regexp:[+_]?([0_9]*[.])?[0_9]+f'
@@ -41,7 +89,7 @@ external_declaration ::= function_definition
                          | declaration
 
 // 関数周りの定義
-function_definition ::= type_specifier direct_declarator {declaration}* compound_statement
+function_definition ::= type_specifier identifier '(' parameter_list ')' compound_statement
 
 type_specifier ::= void
                    | int
@@ -63,8 +111,8 @@ assignment_expression ::= logical_or_expression
                           | postfix_expression assignment_operator assignment_expression
 
 // if文
-selection_statement ::= if '(' expression ')' compound_statement
-                        | if '(' expression ')' compound_statement else compound_statement
+selection_statement ::= if '(' expression ')' statement
+                        | if '(' expression ')' statement else statement
                         
 // while文
 iteration_statement ::= while '(' expression ')' compound_statement
@@ -112,9 +160,8 @@ declaration ::=  type_specifier {init_declarator}*
 init_declarator ::= direct_declarator                      // 宣言だけ
                     | direct_declarator '=' initializer    // 初期化付きの宣言
 direct_declarator ::= identifier                           // 変数宣言 
-                      | identifier '(' parameter_list ')'  // 関数宣言 : 定義時に使用する
                       | identifier '(' {identifier}* ')'   // 関数宣言 : 呼び出し時に使用する
-                      
+          
 parameter_list ::= parameter_declaration                        // 1つのパラメータ
                    | parameter_list ',' parameter_declaration   // 複数のパラメータ
 
