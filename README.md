@@ -19,6 +19,7 @@ c言語をベースとして一部仕様を切り取っている.
 - 3項演算子は取り扱わない
 - ビット演算は取り扱わない
 - ループは while 文のみ
+- 
 ## BNF
 
 ```
@@ -52,6 +53,7 @@ statement ::= expression_statement
               | compound_statement
               | selection_statement
               | iteration_statement
+              | jump_statement
 
 // 変数の初期化
 expression_statement ::= {expression}? ';'
@@ -65,7 +67,7 @@ selection_statement ::= if '(' expression ')' compound_statement
                         | if '(' expression ')' compound_statement else compound_statement
                         
 // while文
-iteration_statement ::= while '(' expression ')' statement
+iteration_statement ::= while '(' expression ')' compound_statement
 
                           
 // 演算子周りの優先順位
@@ -117,12 +119,11 @@ parameter_list ::= parameter_declaration                        // 1つのパラ
                    | parameter_list ',' parameter_declaration   // 複数のパラメータ
 
 parameter_declaration ::= {type_specifier}+ direct_declarator
-                          | {type_specifierr}+               
-
-
-
-
-
+                          | {type_specifierr}+    
+                          
+jump_statement ::= continue ';'
+                   | break ';'
+                   | return {expression}? ';'           
 ```
 
 ### 参考 : C言語のBNF
