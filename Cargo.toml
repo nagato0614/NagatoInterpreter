@@ -5,6 +5,4 @@ edition = "2021"
 
 [dependencies]
 regex = "1.7"
-
-[dev-dependencies]
-NagatoInterpreter = { path = "." }
+core = { path = "./core" }
