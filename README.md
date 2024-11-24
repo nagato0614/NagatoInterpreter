@@ -1,180 +1,196 @@
 # 自作プログラミング言語実行環境
 
 Rust 勉強のため自作言語用のインタプリタを作成する.
+c言語をベースとして一部仕様を切り取っている.
 
+## 仕様
 
-## 自作プログラムの使用
+基本的にはC言語の仕様をベースにしているが, 以下の点が異なる.
 
-```
-    a = 1;
-    b = 2;
-    c = a + b;
-    d = c;
-    d;
-    e = (1 + 1) / 2;
-    e;
-    return e;
-```
-
-- 型は int と float のみ対応
-- 基本的には一行ごとに解析する.
-- 式は基本的にassign式となり, 例外として変数だけの場合は標準出力に値を表示する.
-- 変数だけを記述すると, 標準出力に値を表示する.
-- 四則演算に対応するが, 0除算はエラーで処理を途中終了する
-- 同じ変数が使われたときは値が更新される
-- 変数を再定義した場合は上書きされる
-- 比較演算は真の場合は1, 偽の場合は0を返す
-- 型は浮動小数点と整数のみ対応する
-- '#' 以降はコメントとして無視される
-- 固定長の引数を取る関数を定義することができる
-- 式の最後には必ずセミコロン ';' をつけること
-- return を実行すると, その時点で処理を終了し, return の後ろの値を返す
-- return は関数内では最後に一つ書く必要がある. それ以外の場所に書いた場合はそこで処理を終了する.
-
-## 関数の例
-
-関数は以下のように定義することができる
+_ 文字列は取り扱わない
+_ ポインタは取り扱わない
+_ 構造体は取り扱わない
+_ マクロは取り扱わない
+_ 配列の取り扱いはしない
+_ プリプロセッサは取り扱わない
+_ ヘッダファイルは取り扱わない
+_ switch_case文は取り扱わない
+_ assignment は = のみで, += などは取り扱わない
+_ 3項演算子は取り扱わない
+_ ビット演算は取り扱わない
+_ ループは while 文のみ
+## BNF
 
 ```
-    func f(a) {
-        b = a + 1;
-        return b;
-    }
-    a = 1;
-    b = f(a);
-    b;
+
+// トークンの定義
+{
+    tokens=[
+         space='regexp:\s+'
+         identifier='regexp:[a_zA_Z][a_zA_Z0_9_]*'
+
+         integer_constant='regexp:\d+'
+         floating_constant='regexp:[+_]?([0_9]*[.])?[0_9]+f'
+    ]
+}
+
+translation_unit ::= {external_declaration}*
+
+external_declaration ::= function_definition
+                         | declaration
+
+// 関数周りの定義
+function_definition ::= type_specifier direct_declarator {declaration}* compound_statement
+
+type_specifier ::= void
+                   | int
+                   | float
+
+// ブロック内の処理
+compound_statement ::= '{' {declaration}* {statement}* '}'
+statement ::= expression_statement
+              | compound_statement
+              | selection_statement
+              | iteration_statement
+
+// 変数の初期化
+expression_statement ::= {expression}? ';'
+expression ::= assignment_expression    
+               | expression ',' assignment_expression   // 関数呼び出しやif文の中で複数の式を書く場合に使用
+assignment_expression ::= logical_or_expression
+                          | postfix_expression assignment_operator assignment_expression
+
+// if文
+selection_statement ::= if '(' expression ')' compound_statement
+                        | if '(' expression ')' compound_statement else compound_statement
+                        
+// while文
+iteration_statement ::= while '(' expression ')' statement
+
+                          
+// 演算子周りの優先順位
+// OR 演算子
+logical_or_expression ::= logical_and_expression
+                          | logical_or_expression '||' logical_and_expression
+// AND 演算子
+logical_and_expression ::= equality_expression
+                           | logical_and_expression '&&' equality_expression
+equality_expression ::= relational_expression
+                        | equality_expression '==' relational_expression
+                        | equality_expression '!=' relational_expression
+relational_expression ::= additive_expression
+                          | relational_expression '<' additive_expression
+                          | relational_expression '>' additive_expression
+                          | relational_expression '<=' additive_expression
+                          | relational_expression '>=' additive_expression
+
+additive_expression ::= multiplicative_expression
+                        | additive_expression '+' multiplicative_expression
+                        | additive_expression '_' multiplicative_expression
+
+multiplicative_expression ::= postfix_expression
+                              | multiplicative_expression '*' postfix_expression
+                              | multiplicative_expression '/' postfix_expression
+                              | multiplicative_expression '%' postfix_expression
+postfix_expression ::= primary_expression                                       // 単項演算子
+                       | postfix_expression '[' expression ']'                  // 配列アクセス
+                       | postfix_expression '(' {assignment_expression}* ')'    // 関数呼び出し
+
+primary_expression ::= identifier
+                       | constant
+                       | '(' expression ')'
+
+assignment_operator ::= '='
+
+constant ::= integer_constant
+             | floating_constant
+
+// 宣言周りの定義
+declaration ::=  type_specifier {init_declarator}*
+init_declarator ::= direct_declarator                      // 宣言だけ
+                    | direct_declarator '=' initializer    // 初期化付きの宣言
+direct_declarator ::= identifier                           // 変数宣言 
+                      | identifier '(' parameter_list ')'  // 関数宣言 : 定義時に使用する
+                      | identifier '(' {identifier}* ')'   // 関数宣言 : 呼び出し時に使用する
+                      
+parameter_list ::= parameter_declaration                        // 1つのパラメータ
+                   | parameter_list ',' parameter_declaration   // 複数のパラメータ
+
+parameter_declaration ::= {type_specifier}+ direct_declarator
+                          | {type_specifierr}+               
+
+
+
+
+
 ```
 
-引数としてaを受取り, a+1 の結果を返す.
-関数内には必ずreturn文を記述すること.
-関数内の変数は関数内でのみ有効で,外部変数は取り扱わない
+### 参考 : C言語のBNF
 
-波括弧は省略できず, 以下のような処理はできない
+多分 c89 の仕様に基づいていると思われる.
 
-```:エラー
-    func add(a) return a + 1
-```
+[C言語のBNF](https://gist.githubusercontent.com/arslancharyev31/c48d18d8f917ffe217a0e23eb3535957/raw/45c6f49d927adf288aa3ac9fb0b88d2d569ed691/C_v1.bnf)
 
-関数の引数は複数指定することができる
+出現する要素とそれぞれの日本語訳
 
-```
-    func add(a, b) {
-     c = a + b
-     return c;
-    }
-    a = 1
-    b = 2
-    c = add(a, b)
-    c
-```
-
-一つの引数内に関数呼び出しは不可能
-
-```エラー
-    func(a) { return a + 1; }
-    a = 1;
-    b = func(func(a));
-    b;
-```
-
-## if 文の例
-
-if文は以下のように記述することができる
-
-```
-    a = 1;
-    b = 2;
-    if (a < b) {
-        c = a + b;
-        c;
-    } else {
-        c = a - b;
-        c;
-    }
-```
-
-波括弧は省略不可能で, 以下のような処理はできない
-
-```:エラー
-    if (a < b) return a + b;
-```
-
-if文の中にif文を記述することができる
-
-```
-    a = 1;
-    b = 2;
-    if (a < b) {
-        if (a == 1) {
-            c = a + b;
-            c;
-        } else {
-            c = a - b;
-            c;
-        }
-    } else {
-        c = a - b;
-        c;
-    }
-```
-
-## Backus Naur Form
-
-```
-  Statement ::= Equation | Function | IfStatement
-  Equation ::= Identifier ';' | Assignment ';' | ReturnStatement ';'
-  Assignment ::= Identifier '=' Expression
-  Expression ::= ArithmeticEquation | Comparison | FunctionCall
-  Comparison ::= ArithmeticEquation ComparisonOperator ArithmeticEquation
- 
-  Function ::= "func" Identifier '(' Arguments ')' Block
-  Block ::= '{' (Statement ';')* ReturnStatement ';'}'
-  FunctionCall ::= Identifier '(' CallArgument ')'
-  Arguments ::= [Variable] (',' [Variable])*
-　CallArguments ::= [CallArgument] (',' [CallArgument])*
-  ReturnStatement ::= "return" Expression
-  
-  IfStatement ::= "if" '(' Expression ')' '{' (Expression ';')* '}' ElseStatement*
-  ElseStatement ::= "else" '{' (Expression ';')* '}'
-  
-  ArithmeticEquation ::= Term | Term ArithmeticOperandHead Term
-  Term ::= Factor | Factor ArithmeticOperandTail Factor
-  Factor ::= Value | Identifier | '(' ArithmeticEquation ')' | FunctionCall
-  ArithmeticOperandHead ::= + | -
-  ArithmeticOperandTail ::= * | / | %  
-  ArithmeticOperandParen ::= ( | )
-  ComparisonOperator ::= < | > | == | <= | >= | !=
-  BlockParen ::= { | }
-  Identifier ::= (a-z)+
-  Value ::= Integer | Float
-  Integer ::= [0-9]+
-  Float ::= [0-9]+ '.' [0-9]+
-```
-
-| 英語                       | 日本語        |
-|--------------------------|------------|
-| Statement                | 文          |
-| Equation                 | 式          |
-| Identifier               | 識別子        |
-| Assignment               | 代入         |
-| Expression               | 式          |
-| Arithmetic Equation      | 算術式        |
-| Comparison               | 比較         |
-| Comparison Operator      | 比較演算子      |
-| Function                 | 関数         |
-| Block                    | ブロック       |
-| FunctionCall             | 関数呼び出し     |
-| Arguments                | 引数         |
-| CallArguments            | 呼び出し引数     |
-| Return Statement         | 戻り値文       |
-| If Statement             | if 文       |
-| Else Statement           | else 文     |
-| Term                     | 項          |
-| Factor                   | 因数         |
-| Arithmetic Operand Head  | 算術演算子 (先頭) |
-| Arithmetic Operand Tail  | 算術演算子 (末尾) |
-| Arithmetic Operand Paren | 算術演算子の括弧   |
-| Block Paren              | ブロック括弧     |
-| Value                    | 値          |
-| Integer                  | 整数         |
-| Float                    | 浮動小数点数     |
+| 要素                         | 日本語訳         |
+|____________________________|______________|
+| translation_unit           | 翻訳単位         |
+| external_declaration       | 外部宣言         |
+| function_definition        | 関数定義         |
+| declaration                | 宣言           |
+| declaration_specifier      | 宣言指定子        |
+| storage_class_specifier    | 記憶クラス指定子     |
+| type_specifier             | 型指定子         |
+| type_qualifier             | 型修飾子         |
+| struct_or_union_specifier  | 構造体または共用体指定子 |
+| struct_or_union            | 構造体または共用体    |
+| struct_declaration         | 構造体宣言        |
+| specifier_qualifier        | 指定子または修飾子    |
+| struct_declarator_list     | 構造体宣言子リスト    |
+| struct_declarator          | 構造体宣言子       |
+| declarator                 | 宣言子          |
+| pointer                    | ポインタ         |
+| type_qualifier             | 型修飾子         |
+| direct_declarator          | 直接宣言子        |
+| constant_expression        | 定数式          |
+| conditional_expression     | 条件式          |
+| logical_or_expression      | 論理和式         |
+| logical_and_expression     | 論理積式         |
+| inclusive_or_expression    | 包含的論理和式      |
+| exclusive_or_expression    | 排他的論理和式      |
+| and_expression             | AND式         |
+| equality_expression        | 等価式          |
+| relational_expression      | 関係式          |
+| shift_expression           | シフト式         |
+| additive_expression        | 加減式          |
+| multiplicative_expression  | 乗除式          |
+| cast_expression            | キャスト式        |
+| unary_expression           | 単項式          |
+| unary_operator             | 単項演算子        |
+| postfix_expression         | 後置式          |
+| primary_expression         | 主式           |
+| constant                   | 定数           |
+| expression                 | 式            |
+| assignment_expression      | 代入式          |
+| assignment_operator        | 代入演算子        |
+| type_name                  | 型名           |
+| parameter_type_list        | パラメータ型リスト    |
+| parameter_list             | パラメータリスト     |
+| parameter_declaration      | パラメータ宣言      |
+| abstract_declarator        | 抽象宣言子        |
+| direct_abstract_declarator | 直接抽象宣言子      |
+| enum_specifier             | 列挙型指定子       |
+| enumerator_list            | 列挙子リスト       |
+| enumerator                 | 列挙子          |
+| typedef_name               | 型定義名         |
+| init_declarator            | 初期化宣言子       |
+| initializer                | 初期化子         |
+| initializer_list           | 初期化子リスト      |
+| compound_statement         | 複合文          |
+| statement                  | 文            |
+| labeled_statement          | ラベル付き文       |
+| expression_statement       | 式文           |
+| selection_statement        | 選択文          |
+| iteration_statement        | 繰り返し文        |
+| jump_statement             | ジャンプ文        |
