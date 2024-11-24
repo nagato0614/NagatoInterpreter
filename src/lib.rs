@@ -28,6 +28,8 @@ const BLOCK_LEFT_PAREN: &str = "{";
 const BLOCK_RIGHT_PAREN: &str = "}";
 const COMMA: &str = ",";
 const END_OF_EXPRESSION: &str = ";";
+const IF: &str = "if";
+const ELSE: &str = "else";
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ComparisonOperand
@@ -113,6 +115,8 @@ pub(crate) enum Token
     BlockParen(BlockParen),
     COMMA,
     EndOfExpression,
+    If,
+    Else,
     None,
 }
 
@@ -167,6 +171,8 @@ impl Display for Token
                 }
             Token::COMMA => write!(f, "{}", COMMA),
             Token::EndOfExpression => write!(f, "{}", END_OF_EXPRESSION),
+            Token::If => write!(f, "{}", IF),
+            Token::Else => write!(f, "{}", ELSE),
         }
     }
 }
@@ -498,25 +504,6 @@ impl Interpreter
         }
     }
 
-    pub fn run(&mut self) -> Value
-    {
-        let mut result = Value::Int(0);
-
-        // 関数を抽出
-        self.extract_functions();
-
-        let mut i = 0;
-        for mut tokens in self.tokens_list.clone() {
-            i += 1;
-            let return_state = self.equation(&mut tokens);
-            if let EquationResult::Return(val) = return_state {
-                result = val;
-                break;
-            }
-        }
-        result
-    }
-
     fn extract_functions(&mut self)
     {
         // 新しいトークン列を作成し最終的にはこれを元のトークン列に置き換える
@@ -638,6 +625,38 @@ impl Interpreter
         Function::new(name.as_str(), args, body)
     }
 
+    pub fn run(&mut self) -> Value
+    {
+        let mut result = Value::Int(0);
+
+        // 関数を抽出
+        self.extract_functions();
+
+        let mut i = 0;
+        for mut tokens in self.tokens_list.clone() {
+            i += 1;
+            let return_state = self.equation(&mut tokens);
+            if let EquationResult::Return(val) = return_state {
+                result = val;
+                break;
+            }
+        }
+        result
+    }
+    
+    fn statement(&mut self, tokens: Vec<Token>) -> Value
+    {
+        match tokens.first()
+        {
+            Some(Token::If) => self.if_statement(tokens),
+            _ => panic!("不明なステートメント : {}", tokens.first().unwrap()),
+        }
+    }
+    
+    fn if_statement(&mut self, tokens: Vec<Token>)
+    {
+
+    }
 
     pub(crate) fn equation(&mut self, tokens: &mut Vec<Token>) -> EquationResult
     {
