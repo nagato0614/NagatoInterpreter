@@ -86,7 +86,7 @@ int main() {
 translation_unit ::= {external_declaration}*
 
 external_declaration ::= function_definition
-                         | declaration
+                         | declaration ';'
 
 // 関数周りの定義
 function_definition ::= type_specifier identifier '(' parameter_list ')' compound_statement
@@ -138,14 +138,23 @@ additive_expression ::= multiplicative_expression
                         | additive_expression '+' multiplicative_expression
                         | additive_expression '_' multiplicative_expression
 
-multiplicative_expression ::= postfix_expression
-                              | multiplicative_expression '*' postfix_expression
-                              | multiplicative_expression '/' postfix_expression
-                              | multiplicative_expression '%' postfix_expression
+multiplicative_expression ::= unary_expression
+                              | multiplicative_expression '*' unary_expression
+                              | multiplicative_expression '/' unary_expression
+                              | multiplicative_expression '%' unary_expression
+                              
+unary_expression ::= postfix_expression
+                     | unary-operator postfix_expression
+                     
+unary_operator ::= '-'
+                   | '!'
+                     
 postfix_expression ::= primary_expression                                       // 単項演算子
-                       | postfix_expression '[' expression ']'                  // 配列アクセス
-                       | postfix_expression '(' {assignment_expression}* ')'    // 関数呼び出し
-
+                       | identifier '[' expression ']'                  // 配列アクセス
+                       | identifier '(' argument_expression_list ')'    // 関数呼び出し
+// 関数の呼び出し
+argument_expression_list ::= postfix_expression
+                             | postfix_expression ',' postfix_expression
 primary_expression ::= identifier
                        | constant
                        | '(' expression ')'
@@ -158,15 +167,14 @@ constant ::= integer_constant
 // 宣言周りの定義
 declaration ::=  type_specifier {init_declarator}*
 init_declarator ::= direct_declarator                      // 宣言だけ
-                    | direct_declarator '=' initializer    // 初期化付きの宣言
+                    | direct_declarator '=' logical_or_expression    // 初期化付きの宣言
 direct_declarator ::= identifier                           // 変数宣言 
                       | identifier '(' {identifier}* ')'   // 関数宣言 : 呼び出し時に使用する
           
 parameter_list ::= parameter_declaration                        // 1つのパラメータ
                    | parameter_list ',' parameter_declaration   // 複数のパラメータ
 
-parameter_declaration ::= {type_specifier}+ direct_declarator
-                          | {type_specifierr}+    
+parameter_declaration ::= type_specifier direct_declarator
                           
 jump_statement ::= continue ';'
                    | break ';'

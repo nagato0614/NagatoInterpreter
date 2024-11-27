@@ -2,8 +2,8 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Operator {
     // 算術演算子
-    Add,        // '+'
-    Subtract,   // '_'
+    Plus,        // '+'
+    Minus,   // '-'
     Multiply,   // '*'
     Divide,     // '/'
     Modulo,     // '%'
@@ -19,16 +19,22 @@ pub enum Operator {
     // 論理演算子
     LogicalOr,  // '||'
     LogicalAnd, // '&&'
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnaryOperator {
+    Minus,   // '-'
     LogicalNot, // '!'
 }
+
 
 impl Operator {
     /// 演算子に対応する文字列を返す
     pub fn as_str(&self) -> &'static str {
         match self {
             // 算術演算子
-            Operator::Add => "+",
-            Operator::Subtract => "-",
+            Operator::Plus => "+",
+            Operator::Minus => "-",
             Operator::Multiply => "*",
             Operator::Divide => "/",
             Operator::Modulo => "%",
@@ -44,12 +50,12 @@ impl Operator {
             // 論理演算子
             Operator::LogicalOr => "||",
             Operator::LogicalAnd => "&&",
-            Operator::LogicalNot => "!",
         }
     }
 }
 
-#[derive(Debug, PartialEq)]
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
     Void,
     Int,
@@ -57,7 +63,7 @@ pub enum Type {
 }
 
 /// トークン
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     // 識別子やリテラル
     Identifier(String),        // 変数や関数名
@@ -82,9 +88,9 @@ pub enum Token {
     Else,                      // `else`
     While,                     // `while`
 
-    // 演算子（委譲）
+    // 演算子
     Operator(Operator),        // 演算子を含む
-
+    UnaryOperator(UnaryOperator), // 単項演算子
     // 代入演算子
     Assign,                    // `=`
 
@@ -233,21 +239,38 @@ impl Lexer
                             _ =>
                                 {
                                     self.add_token();
-                                    self.tokens.push(Token::Operator(Operator::LogicalNot));
+                                    self.tokens.push(Token::UnaryOperator(UnaryOperator::LogicalNot));
                                 }
                         }
                     }
-                '+' | '-' | '*' | '/' | '%' =>
+                '+' | '*' | '/' | '%' =>
                     {
                         self.add_token();
                         self.tokens.push(Token::Operator(match c {
-                            '+' => Operator::Add,
-                            '-' => Operator::Subtract,
+                            '+' => Operator::Plus,
                             '*' => Operator::Multiply,
                             '/' => Operator::Divide,
                             '%' => Operator::Modulo,
                             _ => unreachable!(),
                         }));
+                    }
+                '-' =>
+                    {
+                        self.add_token();
+                        
+                        // 一個前のトークンが Identifier か定数の場合は Operator::Minus
+                        if let Some(token) = self.tokens.last() {
+                            match token {
+                                Token::Identifier(_) | Token::IntegerConstant(_) | Token::FloatingConstant(_) => {
+                                    self.tokens.push(Token::Operator(Operator::Minus));
+                                }
+                                _ => {
+                                    self.tokens.push(Token::UnaryOperator(UnaryOperator::Minus));
+                                }
+                            }
+                        } else {
+                            self.tokens.push(Token::UnaryOperator(UnaryOperator::Minus));
+                        }
                     }
                 '>' | '<' =>
                     {
@@ -286,7 +309,6 @@ impl Lexer
     {
         // トークンを追加
         if !self.token_str.is_empty() {
-            println!("token_str: {}", self.token_str);
 
             if let Some(token) = Token::from_keyword(&self.token_str) {
                 self.tokens.push(token);
@@ -337,6 +359,8 @@ mod tests {
     #[test]
     fn test_lexer() {
         let sentence = "
+int x = -0;
+
 int add(int a, int b) {
     int result;
     result = a + b;
@@ -370,9 +394,9 @@ int main() {
 
     print_numbers(5);
 
-    if (sum > 10) {
+    if (sum > -10) {
         return 1;
-    } else if (sum <= 10) {
+    } else if (sum <= -10) {
         return 2;
     } else {
         return 0;
@@ -385,6 +409,14 @@ int main() {
         let tokens = lexer.tokens();
 
         let result = vec![
+            // int x = 0;
+            Token::Type(Type::Int),
+            Token::Identifier("x".to_string()),
+            Token::Assign,
+            Token::UnaryOperator(UnaryOperator::Minus),
+            Token::IntegerConstant(0),
+            Token::Semicolon,
+            
             // int add(int a, int b) {
             Token::Type(Type::Int),
             Token::Identifier("add".to_string()),
@@ -406,7 +438,7 @@ int main() {
             Token::Identifier("result".to_string()),
             Token::Assign,
             Token::Identifier("a".to_string()),
-            Token::Operator(Operator::Add),
+            Token::Operator(Operator::Plus),
             Token::Identifier("b".to_string()),
             Token::Semicolon,
 
@@ -476,7 +508,7 @@ int main() {
             Token::Identifier("i".to_string()),
             Token::Assign,
             Token::Identifier("i".to_string()),
-            Token::Operator(Operator::Add),
+            Token::Operator(Operator::Plus),
             Token::IntegerConstant(1),
             Token::Semicolon,
 
@@ -542,7 +574,7 @@ int main() {
             Token::Identifier("sum".to_string()),
             Token::Assign,
             Token::Identifier("sum".to_string()),
-            Token::Operator(Operator::Subtract),
+            Token::Operator(Operator::Minus),
             Token::IntegerConstant(1),
             Token::Semicolon,
 
@@ -555,7 +587,7 @@ int main() {
             Token::Identifier("sum".to_string()),
             Token::Assign,
             Token::Identifier("sum".to_string()),
-            Token::Operator(Operator::Add),
+            Token::Operator(Operator::Plus),
             Token::IntegerConstant(1),
             Token::Semicolon,
 
@@ -569,11 +601,12 @@ int main() {
             Token::RightParen,
             Token::Semicolon,
 
-            // if (sum > 10) {
+            // if (sum > -10) {
             Token::If,
             Token::LeftParen,
             Token::Identifier("sum".to_string()),
             Token::Operator(Operator::GreaterThan),
+            Token::UnaryOperator(UnaryOperator::Minus),
             Token::IntegerConstant(10),
             Token::RightParen,
             Token::LeftBrace,
@@ -583,13 +616,14 @@ int main() {
             Token::IntegerConstant(1),
             Token::Semicolon,
 
-            // } else if (sum <= 10) {
+            // } else if (sum <= -10) {
             Token::RightBrace,
             Token::Else,
             Token::If,
             Token::LeftParen,
             Token::Identifier("sum".to_string()),
             Token::Operator(Operator::LessThanOrEqual),
+            Token::UnaryOperator(UnaryOperator::Minus),
             Token::IntegerConstant(10),
             Token::RightParen,
             Token::LeftBrace,
@@ -617,6 +651,7 @@ int main() {
         ];
 
         for (i, token) in tokens.iter().enumerate() {
+            println!("{:?} : {:?}", token, result[i]);
             assert_eq!(token, &result[i]);
         }
     }
