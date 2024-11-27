@@ -1,9 +1,9 @@
 use std::cell::RefCell;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use crate::lexical::Token;
 use crate::lexical::Operator;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Leaf
 {
     Token(Token),
@@ -14,11 +14,12 @@ pub enum Leaf
 }
 
 /// 構文木
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Node {
-    pub lhs: Option<Rc<RefCell<Node>>>,
-    pub rhs: Option<Rc<RefCell<Node>>>,
-    pub val: Option<Leaf>,
+    lhs: Option<Rc<RefCell<Node>>>,
+    rhs: Option<Rc<RefCell<Node>>>,
+    val: Option<Leaf>,
+    parent: Weak<RefCell<Node>>,
 }
 
 impl Node {
@@ -27,6 +28,7 @@ impl Node {
             lhs: None,
             rhs: None,
             val: None,
+            parent: Weak::new(),
         }
     }
 
@@ -60,12 +62,16 @@ impl Node {
         }
     }
 
-    pub fn set_lhs(&mut self, node: Node) {
-        self.lhs = Some(Rc::new(RefCell::new(node)));
+    pub fn set_parent(&mut self, parent: &Rc<RefCell<Node>>) {
+        self.parent = Rc::downgrade(&parent);
     }
 
-    pub fn set_rhs(&mut self, node: Node) {
-        self.rhs = Some(Rc::new(RefCell::new(node)));
+    pub fn set_lhs(&mut self, node: Rc<RefCell<Node>>) {
+        self.lhs = Some(node);
+    }
+
+    pub fn set_rhs(&mut self, node: Rc<RefCell<Node>>) {
+        self.rhs = Some(node);
     }
 
     pub fn set_val(&mut self, leaf: Leaf) {
@@ -73,10 +79,10 @@ impl Node {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Parser {
     tokens: Vec<Token>,
-    roots: Vec<Node>,
+    roots: Vec<Rc<RefCell<Node>>>,
     token_index: usize,
 }
 
@@ -155,14 +161,14 @@ impl Parser
     fn declaration(&mut self)
     {
         // グローバル変数定義をパースする
-        let mut root = Node::new();
-        root.set_val(Leaf::Declaration);
+        let mut root = Rc::new(RefCell::new(Node::new()));
+        root.borrow_mut().set_val(Leaf::Declaration);
 
-        if let Some(left_node) = self.type_specifier(&mut root) {
-            root.set_lhs(left_node);
+        if let Some(left_node) = self.type_specifier(&root) {
+            root.borrow_mut().set_lhs(left_node);
         }
-        if let Some(right_node) = self.init_declarator(&mut root) {
-            root.set_rhs(right_node);
+        if let Some(right_node) = self.init_declarator(&root) {
+            root.borrow_mut().set_rhs(right_node);
         }
 
         // 最後に ';' が来ることを確認
@@ -175,13 +181,14 @@ impl Parser
         self.roots.push(root);
     }
 
-    fn type_specifier(&mut self, parent: &mut Node) -> Option<Node>
+    fn type_specifier(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
-        let mut node = Node::new();
+        let mut node = Rc::new(RefCell::new(Node::new()));
+        node.borrow_mut().set_parent(parent);
 
         if let Some(Token::Type(type_specifier)) = self.get_next_token()
         {
-            node.set_val(Leaf::Token(Token::Type(type_specifier)));
+            node.borrow_mut().set_val(Leaf::Token(Token::Type(type_specifier)));
         } else {
             panic!("型が見つかりませんでした : {:?}", self.tokens[self.token_index]);
         }
@@ -189,12 +196,13 @@ impl Parser
         Some(node)
     }
 
-    fn init_declarator(&mut self, parent: &mut Node) -> Option<Node>
+    fn init_declarator(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
-        let mut node = Node::new();
+        let mut node = Rc::new(RefCell::new(Node::new()));
+        node.borrow_mut().set_parent(parent);
 
         if let Some(Token::Identifier(identify)) = self.get_next_token() {
-            node.set_val(Leaf::Token(Token::Identifier(identify)));
+            node.borrow_mut().set_val(Leaf::Token(Token::Identifier(identify)));
         } else {
             panic!("識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
         }
@@ -204,12 +212,12 @@ impl Parser
             Token::Assign => {
                 // 今作成した node を 左の子ノードとして設定する
                 let left_node = node.clone();
-                node.set_lhs(left_node);
-                node.set_val(Leaf::Token(Token::Assign));
+                node.borrow_mut().set_lhs(left_node);
+                node.borrow_mut().set_val(Leaf::Token(Token::Assign));
 
                 // 右の子ノードを設定する
-                if let Some(right_node) = self.logical_or_expression(&mut node) {
-                    node.set_rhs(right_node);
+                if let Some(right_node) = self.logical_or_expression(&node) {
+                    node.borrow_mut().set_rhs(right_node);
                 }
             }
             Token::Semicolon => {
@@ -225,20 +233,21 @@ impl Parser
     }
 
 
-    fn logical_or_expression(&mut self, parent: &mut Node) -> Option<Node>
+    fn logical_or_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
-        let mut node = Node::new();
+        let mut node = Rc::new(RefCell::new(Node::new()));
+        node.borrow_mut().set_parent(parent);
 
-        if let Some(left_node) = self.logical_and_expression(&mut node) {
+        if let Some(left_node) = self.logical_and_expression(&node) {
 
             // 次のトークンが '||' の場合は logical_or_expression をパースする
             if let Some(Token::Operator(Operator::LogicalOr)) = self.get_next_token_without_increment() {
                 println!("logical_or_expression");
-                node.set_val(Leaf::Token(Token::Operator(Operator::LogicalOr)));
-                node.set_lhs(left_node);
+                node.borrow_mut().set_val(Leaf::Token(Token::Operator(Operator::LogicalOr)));
+                node.borrow_mut().set_lhs(left_node);
 
-                if let Some(right_node) = self.logical_or_expression(&mut node) {
-                    node.set_rhs(right_node);
+                if let Some(right_node) = self.logical_or_expression(&node) {
+                    node.borrow_mut().set_rhs(right_node);
                 } else {
                     panic!("右のノードが見つかりませんでした : {:?}", self.tokens[self.token_index]);
                 }
@@ -253,21 +262,22 @@ impl Parser
         }
     }
 
-    fn logical_and_expression(&mut self, parent: &mut Node) -> Option<Node>
+    fn logical_and_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
-        let mut node = Node::new();
+        let mut node = Rc::new(RefCell::new(Node::new()));
+        node.borrow_mut().set_parent(parent);
 
-        if let Some(left_node) = self.equality_expression(&mut node)
+        if let Some(left_node) = self.equality_expression(&node)
         {
             // 次のトークンが '&&' の場合は logical_and_expression をパースする
             if let Some(Token::Operator(Operator::LogicalAnd)) = self.get_next_token_without_increment() {
                 println!("logical_and_expression");
-                node.set_val(Leaf::Token(Token::Operator(Operator::LogicalAnd)));
-                node.set_lhs(left_node);
+                node.borrow_mut().set_val(Leaf::Token(Token::Operator(Operator::LogicalAnd)));
+                node.borrow_mut().set_lhs(left_node);
 
                 // 再度 logical_and_expression を呼び出す
                 if let Some(right_node) = self.logical_and_expression(&mut node) {
-                    node.set_rhs(right_node);
+                    node.borrow_mut().set_rhs(right_node);
                 } else {
                     panic!("右のノードが見つかりませんでした : {:?}", self.tokens[self.token_index]);
                 }
@@ -282,10 +292,11 @@ impl Parser
         }
     }
 
-    fn equality_expression(&mut self, parent: &mut Node) -> Option<Node> {
-        let mut node = Node::new();
+    fn equality_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>> {
+        let mut node = Rc::new(RefCell::new(Node::new()));
+        node.borrow_mut().set_parent(parent);
 
-        if let Some(left_node) = self.relational_expression(&mut node) {
+        if let Some(left_node) = self.relational_expression(&node) {
             // '==' または '!=' の演算子を取得
             if let Some(operator) = self.get_next_token_without_increment()
                 .and_then(|token| match token {
@@ -295,12 +306,12 @@ impl Parser
                 })
             {
                 println!("equality_expression");
-                node.set_val(Leaf::Token(Token::Operator(operator)));
-                node.set_lhs(left_node);
+                node.borrow_mut().set_val(Leaf::Token(Token::Operator(operator)));
+                node.borrow_mut().set_lhs(left_node);
 
                 // 再帰的に equality_expression を呼び出す
-                if let Some(right_node) = self.equality_expression(&mut node) {
-                    node.set_rhs(right_node);
+                if let Some(right_node) = self.equality_expression(&node) {
+                    node.borrow_mut().set_rhs(right_node);
                 } else {
                     panic!(
                         "右のノードが見つかりませんでした : {:?}",
@@ -322,9 +333,10 @@ impl Parser
     }
 
 
-    fn relational_expression(&mut self, parent: &mut Node) -> Option<Node>
+    fn relational_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
-        let mut node = Node::new();
+        let mut node = Rc::new(RefCell::new(Node::new()));
+        node.borrow_mut().set_parent(parent);
 
         if let Some(left_node) = self.additive_expression(&mut node) {
             // '<' または '>' の演算子を取得
@@ -338,12 +350,12 @@ impl Parser
                 })
             {
                 println!("relational_expression");
-                node.set_val(Leaf::Token(Token::Operator(operator)));
-                node.set_lhs(left_node);
+                node.borrow_mut().set_val(Leaf::Token(Token::Operator(operator)));
+                node.borrow_mut().set_lhs(left_node);
 
                 // 再帰的に relational_expression を呼び出す
                 if let Some(right_node) = self.relational_expression(&mut node) {
-                    node.set_rhs(right_node);
+                    node.borrow_mut().set_rhs(right_node);
                 } else {
                     panic!("右のノードが見つかりませんでした : {:?}", self.tokens[self.token_index]);
                 }
@@ -359,9 +371,10 @@ impl Parser
     }
 
 
-    fn additive_expression(&mut self, parent: &mut Node) -> Option<Node>
+    fn additive_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
-        let mut node = Node::new();
+        let mut node = Rc::new(RefCell::new(Node::new()));
+        node.borrow_mut().set_parent(parent);
 
         if let Some(left_node) = self.multiplicative_expression(&mut node) {
             // '+' または '-' の演算子を取得
@@ -373,12 +386,12 @@ impl Parser
                 })
             {
                 println!("additive_expression");
-                node.set_val(Leaf::Token(Token::Operator(operator)));
-                node.set_lhs(left_node);
+                node.borrow_mut().set_val(Leaf::Token(Token::Operator(operator)));
+                node.borrow_mut().set_lhs(left_node);
 
                 // 再帰的に additive_expression を呼び出す
                 if let Some(right_node) = self.additive_expression(&mut node) {
-                    node.set_rhs(right_node);
+                    node.borrow_mut().set_rhs(right_node);
                 } else {
                     panic!("右のノードが見つかりませんでした : {:?}", self.tokens[self.token_index]);
                 }
@@ -393,9 +406,10 @@ impl Parser
         }
     }
 
-    fn multiplicative_expression(&mut self, parent: &mut Node) -> Option<Node>
+    fn multiplicative_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
-        let mut node = Node::new();
+        let mut node = Rc::new(RefCell::new(Node::new()));
+        node.borrow_mut().set_parent(parent);
 
         if let Some(left_node) = self.unary_expression(&mut node) {
             // '*' または '/' の演算子を取得
@@ -407,12 +421,12 @@ impl Parser
                 })
             {
                 println!("multiplicative_expression");
-                node.set_val(Leaf::Token(Token::Operator(operator)));
-                node.set_lhs(left_node);
+                node.borrow_mut().set_val(Leaf::Token(Token::Operator(operator)));
+                node.borrow_mut().set_lhs(left_node);
 
                 // 再帰的に multiplicative_expression を呼び出す
                 if let Some(right_node) = self.multiplicative_expression(&mut node) {
-                    node.set_rhs(right_node);
+                    node.borrow_mut().set_rhs(right_node);
                 } else {
                     panic!("右のノードが見つかりませんでした : {:?}", self.tokens[self.token_index]);
                 }
@@ -423,25 +437,26 @@ impl Parser
                 Some(left_node)
             }
         } else {
-            panic!("識別子が���つかりませんでした : {:?}", self.tokens[self.token_index]);
+            panic!("識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
         }
     }
 
-    fn unary_expression(&mut self, parent: &mut Node) -> Option<Node>
+    fn unary_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
-        let mut node = Node::new();
+        let mut node = Rc::new(RefCell::new(Node::new()));
+        node.borrow_mut().set_parent(parent);
 
         // 次のトークンを取得
         let next_token = self.get_next_token_without_increment();
 
         if let Some(Token::UnaryOperator(operator)) = next_token {
             // 単項演算子の場合
-            node.set_val(Leaf::UnaryExpression);
+            node.borrow_mut().set_val(Leaf::UnaryExpression);
             self.postfix_expression(&mut node);
         } else {
             // 単項演算子でない場合は postfix_expression をパースする
             if let Some(postfix_node) = self.postfix_expression(&mut node) {
-                node.set_val(Leaf::Node(Rc::new(RefCell::new(postfix_node))));
+                node.borrow_mut().set_val(Leaf::Node(postfix_node));
             } else {
                 panic!("識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
             }
@@ -450,39 +465,25 @@ impl Parser
         None
     }
 
-    fn postfix_expression(&mut self, parent: &mut Node) -> Option<Node>
+    fn postfix_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
         let mut node = Node::new();
 
-        // 仮実装 : 値をそのまま val に設定する
-        if let Some(token) = self.get_next_token() {
-            let mut node = Node::new();
-            node.set_val(Leaf::Token(token));
-            return Some(node);
-        } else {
-            panic!("識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
-        }
+        None
     }
-    
-    fn primary_expression(&mut self, parent: &mut Node) -> Option<Node>
+
+    fn primary_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
         let mut node = Node::new();
 
-        // 仮実装 : 値をそのまま val に設定する
-        if let Some(token) = self.get_next_token() {
-            let mut node = Node::new();
-            node.set_val(Leaf::Token(token));
-            return Some(node);
-        } else {
-            panic!("識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
-        }
+        unimplemented!("primary_expression");
     }
 
     pub fn show_tree(&self)
     {
         for root in &self.roots {
             print!("root : ");
-            Node::show_node(&root);
+            Node::show_node(&root.borrow());
         }
     }
 }
