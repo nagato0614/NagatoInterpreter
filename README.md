@@ -136,7 +136,7 @@ relational_expression ::= additive_expression
 
 additive_expression ::= multiplicative_expression
                         | additive_expression '+' multiplicative_expression
-                        | additive_expression '_' multiplicative_expression
+                        | additive_expression '-' multiplicative_expression
 
 multiplicative_expression ::= unary_expression
                               | multiplicative_expression '*' unary_expression
@@ -150,14 +150,14 @@ unary_operator ::= '-'
                    | '!'
                      
 postfix_expression ::= primary_expression                                       // 単項演算子
-                       | identifier '[' expression ']'                  // 配列アクセス
-                       | identifier '(' argument_expression_list ')'    // 関数呼び出し
+                       | postfix_expression '[' expression ']'                  // 配列アクセス
+                       | postfix_expression '(' assignment_expression ')'    // 関数呼び出し
 // 関数の呼び出し
 argument_expression_list ::= postfix_expression
                              | postfix_expression ',' postfix_expression
 primary_expression ::= identifier
                        | constant
-                       | '(' expression ')'
+                       | '(' logical_or_expression ')'
 
 assignment_operator ::= '='
 

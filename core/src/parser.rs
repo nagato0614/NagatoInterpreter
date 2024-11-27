@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
-use crate::lexical::Token;
+use crate::lexical::{Constant, Token};
 use crate::lexical::Operator;
 
 #[derive(Debug, Clone)]
@@ -441,6 +441,7 @@ impl Parser
         }
     }
 
+    // 最終的にはpostfix_expression を呼び出すが関数呼び出しと配列は現状無視する.
     fn unary_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
         let mut node = Rc::new(RefCell::new(Node::new()));
@@ -452,31 +453,54 @@ impl Parser
         if let Some(Token::UnaryOperator(operator)) = next_token {
             // 単項演算子の場合
             node.borrow_mut().set_val(Leaf::UnaryExpression);
-            self.postfix_expression(&mut node);
+            self.primary_expression(&mut node);
         } else {
             // 単項演算子でない場合は postfix_expression をパースする
-            if let Some(postfix_node) = self.postfix_expression(&mut node) {
+            if let Some(postfix_node) = self.primary_expression(&mut node) {
                 node.borrow_mut().set_val(Leaf::Node(postfix_node));
             } else {
                 panic!("識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
             }
         }
 
-        None
+        Some(node)
     }
 
     fn postfix_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
-        let mut node = Node::new();
-
-        None
+        unimplemented!();
     }
 
     fn primary_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
-        let mut node = Node::new();
+        let mut node = Rc::new(RefCell::new(Node::new()));
+        node.borrow_mut().set_parent(parent);
 
-        unimplemented!("primary_expression");
+        // 次のトークンを取得
+        let next_token = self.get_next_token();
+
+        // '(' の場合は式をパースする
+        if let Some(Token::LeftParen) = next_token {
+            println!("primary_expression");
+            self.logical_or_expression(&node);
+
+            // ')' が来ることを確認
+            if let Some(Token::RightParen) = self.get_next_token() {
+                // 何もしない
+            } else {
+                panic!("')' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+            }
+        } else if let Some(Token::Constant(Constant::Integer(value))) = next_token {
+            // 整数の場合
+            node.borrow_mut().set_val(Leaf::Token(Token::Constant(Constant::Integer(value))));
+        } else if let Some(Token::Identifier(identify)) = next_token {
+            // 識別子の場合
+            node.borrow_mut().set_val(Leaf::Token(Token::Identifier(identify)));
+        } else {
+            panic!("primary_expression で識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+        }
+
+        None
     }
 
     pub fn show_tree(&self)

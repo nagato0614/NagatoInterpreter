@@ -62,13 +62,18 @@ pub enum Type {
     Float,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum Constant {
+    Integer(i64),
+    Float(f64),
+}
+
 /// トークン
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     // 識別子やリテラル
     Identifier(String),        // 変数や関数名
-    IntegerConstant(i64),      // 整数リテラル
-    FloatingConstant(f64),     // 浮動小数点リテラル
+    Constant(Constant),         // 定数
 
     // 型指定子
     Type(Type),                // 型指定子
@@ -118,8 +123,10 @@ impl Token
             "break" => Some(Token::Break),
 
             // 数値の場合
-            _ if keyword.parse::<i64>().is_ok() => Some(Token::IntegerConstant(keyword.parse::<i64>().unwrap())),
-            _ if keyword.parse::<f64>().is_ok() => Some(Token::FloatingConstant(keyword.parse::<f64>().unwrap())),
+            _ if keyword.parse::<i64>().is_ok() =>
+                Some(Token::Constant(Constant::Integer(keyword.parse::<i64>().unwrap()))),
+            _ if keyword.parse::<f64>().is_ok() =>
+                Some(Token::Constant(Constant::Float(keyword.parse::<f64>().unwrap()))),
             _ => None,
         }
     }
@@ -257,11 +264,11 @@ impl Lexer
                 '-' =>
                     {
                         self.add_token();
-                        
+
                         // 一個前のトークンが Identifier か定数の場合は Operator::Minus
                         if let Some(token) = self.tokens.last() {
                             match token {
-                                Token::Identifier(_) | Token::IntegerConstant(_) | Token::FloatingConstant(_) => {
+                                Token::Identifier(_) | Token::Constant(_) => {
                                     self.tokens.push(Token::Operator(Operator::Minus));
                                 }
                                 _ => {
@@ -309,7 +316,6 @@ impl Lexer
     {
         // トークンを追加
         if !self.token_str.is_empty() {
-
             if let Some(token) = Token::from_keyword(&self.token_str) {
                 self.tokens.push(token);
             } else {
@@ -414,9 +420,9 @@ int main() {
             Token::Identifier("x".to_string()),
             Token::Assign,
             Token::UnaryOperator(UnaryOperator::Minus),
-            Token::IntegerConstant(0),
+            Token::Constant(Constant::Integer(0)),
             Token::Semicolon,
-            
+
             // int add(int a, int b) {
             Token::Type(Type::Int),
             Token::Identifier("add".to_string()),
@@ -492,7 +498,7 @@ int main() {
             Token::Type(Type::Int),
             Token::Identifier("i".to_string()),
             Token::Assign,
-            Token::IntegerConstant(0),
+            Token::Constant(Constant::Integer(0)),
             Token::Semicolon,
 
             // while (i < n) {
@@ -509,7 +515,7 @@ int main() {
             Token::Assign,
             Token::Identifier("i".to_string()),
             Token::Operator(Operator::Plus),
-            Token::IntegerConstant(1),
+            Token::Constant(Constant::Integer(1)),
             Token::Semicolon,
 
             // continue;
@@ -544,9 +550,9 @@ int main() {
             Token::Assign,
             Token::Identifier("add".to_string()),
             Token::LeftParen,
-            Token::IntegerConstant(5),
+            Token::Constant(Constant::Integer(5)),
             Token::Comma,
-            Token::IntegerConstant(10),
+            Token::Constant(Constant::Integer(10)),
             Token::RightParen,
             Token::Semicolon,
 
@@ -555,9 +561,9 @@ int main() {
             Token::Assign,
             Token::Identifier("multiply".to_string()),
             Token::LeftParen,
-            Token::FloatingConstant(2.5),
+            Token::Constant(Constant::Float(2.5)),
             Token::Comma,
-            Token::FloatingConstant(4.0),
+            Token::Constant(Constant::Float(4.0)),
             Token::RightParen,
             Token::Semicolon,
 
@@ -566,7 +572,7 @@ int main() {
             Token::LeftParen,
             Token::Identifier("sum".to_string()),
             Token::Operator(Operator::GreaterThan),
-            Token::IntegerConstant(10),
+            Token::Constant(Constant::Integer(10)),
             Token::RightParen,
             Token::LeftBrace,
 
@@ -575,7 +581,7 @@ int main() {
             Token::Assign,
             Token::Identifier("sum".to_string()),
             Token::Operator(Operator::Minus),
-            Token::IntegerConstant(1),
+            Token::Constant(Constant::Integer(1)),
             Token::Semicolon,
 
             // } else {
@@ -588,7 +594,7 @@ int main() {
             Token::Assign,
             Token::Identifier("sum".to_string()),
             Token::Operator(Operator::Plus),
-            Token::IntegerConstant(1),
+            Token::Constant(Constant::Integer(1)),
             Token::Semicolon,
 
             // }
@@ -597,7 +603,7 @@ int main() {
             // print_numbers(5);
             Token::Identifier("print_numbers".to_string()),
             Token::LeftParen,
-            Token::IntegerConstant(5),
+            Token::Constant(Constant::Integer(5)),
             Token::RightParen,
             Token::Semicolon,
 
@@ -607,13 +613,13 @@ int main() {
             Token::Identifier("sum".to_string()),
             Token::Operator(Operator::GreaterThan),
             Token::UnaryOperator(UnaryOperator::Minus),
-            Token::IntegerConstant(10),
+            Token::Constant(Constant::Integer(10)),
             Token::RightParen,
             Token::LeftBrace,
 
             // return 1;
             Token::Return,
-            Token::IntegerConstant(1),
+            Token::Constant(Constant::Integer(1)),
             Token::Semicolon,
 
             // } else if (sum <= -10) {
@@ -624,13 +630,13 @@ int main() {
             Token::Identifier("sum".to_string()),
             Token::Operator(Operator::LessThanOrEqual),
             Token::UnaryOperator(UnaryOperator::Minus),
-            Token::IntegerConstant(10),
+            Token::Constant(Constant::Integer(10)),
             Token::RightParen,
             Token::LeftBrace,
 
             // return 2;
             Token::Return,
-            Token::IntegerConstant(2),
+            Token::Constant(Constant::Integer(2)),
             Token::Semicolon,
 
             // } else {
@@ -640,7 +646,7 @@ int main() {
 
             // return 0;
             Token::Return,
-            Token::IntegerConstant(0),
+            Token::Constant(Constant::Integer(0)),
             Token::Semicolon,
 
             // }
