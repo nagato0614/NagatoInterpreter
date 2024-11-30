@@ -108,7 +108,6 @@ expression_statement ::= {expression}? ';'
 expression ::= assignment_expression    
                | expression ',' assignment_expression   // 関数呼び出しやif文の中で複数の式を書く場合に使用
 assignment_expression ::= logical_or_expression
-                          | postfix_expression assignment_operator assignment_expression
 
 // if文
 selection_statement ::= if '(' expression ')' statement
@@ -149,14 +148,14 @@ unary_expression ::= postfix_expression
 unary_operator ::= '-'
                    | '!'
                      
-postfix_expression ::= primary_expression                                       // 単項演算子
-                       | postfix_expression '[' expression ']'                  // 配列アクセス
-                       | postfix_expression '(' assignment_expression ')'    // 関数呼び出し
+postfix_expression ::= primary_expression                               // 単項演算子
+                       | identifier                                     // 変数
+                       | identifier '[' logical_or_expression ']'       // 配列アクセス
+                       | identifier '(' argument_expression_list ')'    // 関数呼び出し
 // 関数の呼び出し
-argument_expression_list ::= postfix_expression
-                             | postfix_expression ',' postfix_expression
-primary_expression ::= identifier
-                       | constant
+argument_expression_list ::= {logical_or_expression}* {',' logical_or_expression}*
+
+primary_expression ::= constant
                        | '(' logical_or_expression ')'
 
 assignment_operator ::= '='

@@ -4,6 +4,52 @@ use crate::lexical::{Constant, Token};
 use crate::lexical::Operator;
 
 #[derive(Debug, Clone)]
+pub struct FunctionCall {
+    // 呼び出す関数名
+    name: String,
+
+    // 引数のリスト, 0個以上の logical_or_expression が入る
+    arguments: Vec<Rc<RefCell<Node>>>,
+}
+
+impl FunctionCall
+{
+    pub fn new(name: String) -> Self {
+        FunctionCall {
+            name,
+            arguments: Vec::new(),
+        }
+    }
+
+    pub fn add_argument(&mut self, argument: Rc<RefCell<Node>>) {
+        self.arguments.push(argument);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ArrayAccess {
+    // 配列名
+    name: String,
+
+    // インデックス (logical_or_expression)
+    root: Rc<RefCell<Node>>,
+}
+
+impl ArrayAccess
+{
+    pub fn new(name: String) -> Self {
+        ArrayAccess {
+            name,
+            root: Rc::new(RefCell::new(Node::new())),
+        }
+    }
+
+    pub fn set_root(&mut self, root: Rc<RefCell<Node>>) {
+        self.root = root;
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Leaf
 {
     Token(Token),
@@ -11,6 +57,8 @@ pub enum Leaf
     Declaration,
     FunctionDefinition,
     UnaryExpression,
+    FunctionCall(FunctionCall),
+    ArrayAccess(ArrayAccess),
 }
 
 /// 構文木
@@ -456,7 +504,7 @@ impl Parser
             self.primary_expression(&mut node);
         } else {
             // 単項演算子でない場合は postfix_expression をパースする
-            if let Some(postfix_node) = self.primary_expression(&mut node) {
+            if let Some(postfix_node) = self.postfix_expression(&mut node) {
                 node.borrow_mut().set_val(Leaf::Node(postfix_node));
             } else {
                 panic!("識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
@@ -468,7 +516,93 @@ impl Parser
 
     fn postfix_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
-        unimplemented!();
+        let node = Rc::new(RefCell::new(Node::new()));
+        node.borrow_mut().set_parent(parent);
+
+        // 次のトークンを取得
+        let next_token = self.get_next_token_without_increment();
+
+        // identifier ではない時 primary_expression を呼び出す
+        if !self.is_primary_expression() {
+            self.primary_expression(&node);
+        } else {
+
+
+            // identifier の場合
+            if let Some(Token::Identifier(identify)) = self.get_next_token() {
+                if let Some(Token::LeftParen) = self.get_next_token()
+                {
+                    // 関数呼び出し : postfix_expression '(' argument_expression_list ')'
+                    let mut function_call = FunctionCall::new(identify);
+
+                    // ')' が来るまで logical_or_expression としてパースする
+                    while let Some(token) = self.get_next_token_without_increment() {
+                        if token != Token::RightParen {
+                            if let Some(argument_expression_list)
+                                = self.logical_or_expression(&node) {
+                                function_call.add_argument(argument_expression_list);
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+
+                    // ')' を取り出す
+                    self.get_next_token();
+
+                    node.borrow_mut().set_val(Leaf::FunctionCall(function_call));
+                } else if let Some(Token::LeftBracket) = self.get_next_token()
+                {
+                    // 配列アクセス : postfix_expression '[' logical_or_expression ']'
+                    let mut array_access = ArrayAccess::new(identify);
+
+                    // 次の token が ']' の時
+                    if let Some(Token::RightBracket) = self.get_next_token_without_increment() {
+                        // ']' を取り出す
+                        self.get_next_token();
+
+                        node.borrow_mut().set_val(Leaf::ArrayAccess(array_access));
+                    } else {
+                        // logical_or_expression をパースする
+                        if let Some(root) = self.logical_or_expression(&node) {
+                            array_access.set_root(root);
+                            node.borrow_mut().set_val(Leaf::ArrayAccess(array_access));
+
+                            // ']' を取り出す
+                            self.get_next_token();
+                        } else {
+                            panic!("配列アクセスの右のノードが見つかりませんでした : {:?}", self.tokens[self.token_index]);
+                        }
+                    }
+                } else {
+                    // 関数呼び出しでも配列でもない場合は識別子として処理する
+                    node.borrow_mut().set_val(Leaf::Token(Token::Identifier(identify)));
+                }
+            } else {
+                panic!("識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+            }
+        }
+
+        None
+    }
+
+    fn argument_expression_list(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
+    {
+        let mut node = Rc::new(RefCell::new(Node::new()));
+        node.borrow_mut().set_parent(parent);
+
+        Some(node)
+    }
+
+    fn is_primary_expression(&self) -> bool
+    {
+        let next_token = self.get_next_token_without_increment();
+        match next_token {
+            Some(Token::LeftParen) => true,
+            Some(Token::Constant(_)) => true,
+            Some(Token::Identifier(_)) => true,
+            _ => false,
+        }
     }
 
     fn primary_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
@@ -490,9 +624,19 @@ impl Parser
             } else {
                 panic!("')' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
             }
-        } else if let Some(Token::Constant(Constant::Integer(value))) = next_token {
-            // 整数の場合
-            node.borrow_mut().set_val(Leaf::Token(Token::Constant(Constant::Integer(value))));
+        } else if let Some(Token::Constant(const_value)) = next_token {
+            match const_value {
+                Constant::Integer(value) => {
+                    // 定数の場合
+                    node.borrow_mut()
+                        .set_val(Leaf::Token(Token::Constant(Constant::Integer(value))));
+                }
+                Constant::Float(value) => {
+                    // 定数の場合
+                    node.borrow_mut()
+                        .set_val(Leaf::Token(Token::Constant(Constant::Float(value))));
+                }
+            }
         } else if let Some(Token::Identifier(identify)) = next_token {
             // 識別子の場合
             node.borrow_mut().set_val(Leaf::Token(Token::Identifier(identify)));
@@ -519,7 +663,7 @@ mod tests {
     #[test]
     fn test_parser()
     {
-        let program = String::from("int a = 0;");
+        let program = String::from("int a = b();");
 
         let mut lexer = crate::lexical::Lexer::new(program);
         lexer.tokenize();
