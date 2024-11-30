@@ -50,11 +50,46 @@ impl ArrayAccess
 }
 
 #[derive(Debug, Clone)]
+pub struct Declaration {
+    // 型
+    type_specifier: Token,
+
+    // 識別子
+    identify: Token,
+
+    // 初期化子
+    initializer: Option<Rc<RefCell<Node>>>,
+}
+
+impl Declaration
+{
+    pub fn new() -> Self {
+        Declaration {
+            type_specifier: Token::Unknown,
+            identify: Token::Unknown,
+            initializer: None,
+        }
+    }
+
+    pub fn set_type_specifier(&mut self, type_specifier: Token) {
+        self.type_specifier = type_specifier;
+    }
+
+    pub fn set_identify(&mut self, identify: Token) {
+        self.identify = identify;
+    }
+
+    pub fn set_initializer(&mut self, initializer: Rc<RefCell<Node>>) {
+        self.initializer = Some(initializer);
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Leaf
 {
     Token(Token),
     Node(Rc<RefCell<Node>>),
-    Declaration,
+    Declaration(Declaration),
     FunctionDefinition,
     UnaryExpression,
     FunctionCall(FunctionCall),
@@ -87,8 +122,15 @@ impl Node {
                 Leaf::Token(token) => {
                     println!("{:?}", token);
                 }
-                Leaf::Declaration => {
+                Leaf::Declaration(declaration) => {
                     println!("Declaration");
+                    println!("type_specifier : {:?}", declaration.type_specifier);
+                    println!("identify : {:?}", declaration.identify);
+                    
+                    if let Some(initializer) = &declaration.initializer {
+                        print!("initializer : ");
+                        Node::show_node(&initializer.borrow());
+                    }
                 }
                 Leaf::FunctionDefinition => {
                     println!("FunctionDefinition");
@@ -168,6 +210,11 @@ impl Parser
         }
     }
 
+    fn token_index_increment(&mut self)
+    {
+        self.token_index += 1;
+    }
+
     pub fn parse(&mut self)
     {
         self.translation_unit();
@@ -210,13 +257,27 @@ impl Parser
     {
         // グローバル変数定義をパースする
         let mut root = Rc::new(RefCell::new(Node::new()));
-        root.borrow_mut().set_val(Leaf::Declaration);
+        let mut declaration = Declaration::new();
 
-        if let Some(left_node) = self.type_specifier(&root) {
-            root.borrow_mut().set_lhs(left_node);
+        if let Some(type_spec) = self.get_next_token() {
+            declaration.set_type_specifier(type_spec);
         }
-        if let Some(right_node) = self.init_declarator(&root) {
-            root.borrow_mut().set_rhs(right_node);
+        if let Some(right_node) = self.get_next_token() {
+            declaration.set_identify(right_node);
+        }
+        
+        // 次のトークンが '=' の場合は initializer をパースする
+        if let Some(Token::Assign) = self.get_next_token_without_increment() {
+            self.token_index_increment();
+            
+            let decl_root = Rc::new(RefCell::new(Node::new()));
+
+            if let Some(initializer) = self.logical_or_expression(&decl_root) {
+                declaration.set_initializer(initializer);
+            }
+            else { 
+                panic!("初期化子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+            }
         }
 
         // 最後に ';' が来ることを確認
@@ -225,6 +286,8 @@ impl Parser
         } else {
             panic!("';' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
         }
+        
+        root.borrow_mut().set_val(Leaf::Declaration(declaration));
 
         self.roots.push(root);
     }
@@ -504,10 +567,9 @@ impl Parser
             self.primary_expression(&mut node);
         } else {
             // 単項演算子でない場合は postfix_expression をパースする
-            if let Some(postfix_node) = self.postfix_expression(&mut node) {
+            let postfix_node = self.postfix_expression(&mut node);
+            if let Some(postfix_node) = postfix_node {
                 node.borrow_mut().set_val(Leaf::Node(postfix_node));
-            } else {
-                panic!("識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
             }
         }
 
@@ -519,68 +581,76 @@ impl Parser
         let node = Rc::new(RefCell::new(Node::new()));
         node.borrow_mut().set_parent(parent);
 
-        // 次のトークンを取得
-        let next_token = self.get_next_token_without_increment();
 
-        // identifier ではない時 primary_expression を呼び出す
-        if !self.is_primary_expression() {
-            self.primary_expression(&node);
-        } else {
+        if let Some(next_token) = self.get_next_token_without_increment()
+        {
+            match next_token
+            {
+                Token::Identifier(identify) => {
+                    // index を進める
+                    self.token_index_increment();
 
+                    if let Some(next_identify) = self.get_next_token()
+                    {
+                        match next_identify
+                        {
+                            Token::LeftParen => {
+                                // 関数呼び出しの場合
+                                let mut function_call = FunctionCall::new(identify);
 
-            // identifier の場合
-            if let Some(Token::Identifier(identify)) = self.get_next_token() {
-                if let Some(Token::LeftParen) = self.get_next_token()
-                {
-                    // 関数呼び出し : postfix_expression '(' argument_expression_list ')'
-                    let mut function_call = FunctionCall::new(identify);
+                                // ')' が来るまで argument_expression_list を呼び出す
+                                loop {
+                                    let next_token = self.get_next_token();
+                                    if let Some(Token::RightParen) = next_token {
+                                        break;
+                                    }
 
-                    // ')' が来るまで logical_or_expression としてパースする
-                    while let Some(token) = self.get_next_token_without_increment() {
-                        if token != Token::RightParen {
-                            if let Some(argument_expression_list)
-                                = self.logical_or_expression(&node) {
-                                function_call.add_argument(argument_expression_list);
+                                    let logical_or_expression_node
+                                        = self.logical_or_expression(&node);
+                                    if let Some(arg) = logical_or_expression_node {
+                                        function_call.add_argument(arg);
+                                    }
+                                }
+
+                                node.borrow_mut().set_val(Leaf::FunctionCall(function_call));
                             }
-                        } else {
-                            break;
+                            Token::LeftBracket => {
+                                // 配列の場合
+                                let mut array_access = ArrayAccess::new(identify);
+
+                                // ']' のときはからの配列として扱う
+                                if let Some(Token::RightBracket) = self.get_next_token() {
+                                    // 何もしない
+                                } else {
+                                    // 配列の index を取得
+                                    let logical_or_expression_node = self.logical_or_expression(&node);
+                                    if let Some(index) = logical_or_expression_node {
+                                        array_access.set_root(index);
+                                    }
+                                }
+
+                                node.borrow_mut().set_val(Leaf::ArrayAccess(array_access));
+                            }
+                            _ => {
+                                // それ以外の場合は identifier として処理する
+                                node.borrow_mut().set_val(Leaf::Token(Token::Identifier(identify)));
+                            }
                         }
+
+                        return Some(node);
                     }
-
-                    // ')' を取り出す
-                    self.get_next_token();
-
-                    node.borrow_mut().set_val(Leaf::FunctionCall(function_call));
-                } else if let Some(Token::LeftBracket) = self.get_next_token()
-                {
-                    // 配列アクセス : postfix_expression '[' logical_or_expression ']'
-                    let mut array_access = ArrayAccess::new(identify);
-
-                    // 次の token が ']' の時
-                    if let Some(Token::RightBracket) = self.get_next_token_without_increment() {
-                        // ']' を取り出す
-                        self.get_next_token();
-
-                        node.borrow_mut().set_val(Leaf::ArrayAccess(array_access));
-                    } else {
-                        // logical_or_expression をパースする
-                        if let Some(root) = self.logical_or_expression(&node) {
-                            array_access.set_root(root);
-                            node.borrow_mut().set_val(Leaf::ArrayAccess(array_access));
-
-                            // ']' を取り出す
-                            self.get_next_token();
-                        } else {
-                            panic!("配列アクセスの右のノードが見つかりませんでした : {:?}", self.tokens[self.token_index]);
-                        }
-                    }
-                } else {
-                    // 関数呼び出しでも配列でもない場合は識別子として処理する
-                    node.borrow_mut().set_val(Leaf::Token(Token::Identifier(identify)));
                 }
-            } else {
-                panic!("識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+                // それ以外の場合
+                _ => {
+                    // primary_expression を呼び出す
+                    let primary_node = self.primary_expression(&node);
+                    if let Some(primary_node) = primary_node {
+                        node.borrow_mut().set_val(Leaf::Node(primary_node));
+                    }
+                }
             }
+
+            return Some(node);
         }
 
         None
@@ -594,54 +664,42 @@ impl Parser
         Some(node)
     }
 
-    fn is_primary_expression(&self) -> bool
-    {
-        let next_token = self.get_next_token_without_increment();
-        match next_token {
-            Some(Token::LeftParen) => true,
-            Some(Token::Constant(_)) => true,
-            Some(Token::Identifier(_)) => true,
-            _ => false,
-        }
-    }
-
     fn primary_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
         let mut node = Rc::new(RefCell::new(Node::new()));
         node.borrow_mut().set_parent(parent);
 
         // 次のトークンを取得
-        let next_token = self.get_next_token();
-
-        // '(' の場合は式をパースする
-        if let Some(Token::LeftParen) = next_token {
-            println!("primary_expression");
-            self.logical_or_expression(&node);
-
-            // ')' が来ることを確認
-            if let Some(Token::RightParen) = self.get_next_token() {
-                // 何もしない
-            } else {
-                panic!("')' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
-            }
-        } else if let Some(Token::Constant(const_value)) = next_token {
-            match const_value {
-                Constant::Integer(value) => {
+        if let Some(next_token) = self.get_next_token()
+        {
+            match next_token
+            {
+                Token::Constant(constant) => {
                     // 定数の場合
-                    node.borrow_mut()
-                        .set_val(Leaf::Token(Token::Constant(Constant::Integer(value))));
+                    node.borrow_mut().set_val(Leaf::Token(Token::Constant(constant)));
                 }
-                Constant::Float(value) => {
-                    // 定数の場合
-                    node.borrow_mut()
-                        .set_val(Leaf::Token(Token::Constant(Constant::Float(value))));
+                Token::LeftParen => {
+                    // '(' が来た場合は logical_or_expression を呼び出す
+                    let logical_or_expression_node = self.logical_or_expression(&node);
+                    if let Some(logical_or_expression_node) = logical_or_expression_node {
+                        node.borrow_mut().set_val(Leaf::Node(logical_or_expression_node));
+                    }
+
+                    // ')' が来ることを確認
+                    if let Some(Token::RightParen) = self.get_next_token() {
+                        // 何もしない
+                    } else {
+                        panic!("')' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+                    }
+
+                    return Some(node);
+                }
+                _ => {
+                    // 何もしない
+                    // semicolon はここで処理しない
                 }
             }
-        } else if let Some(Token::Identifier(identify)) = next_token {
-            // 識別子の場合
-            node.borrow_mut().set_val(Leaf::Token(Token::Identifier(identify)));
-        } else {
-            panic!("primary_expression で識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+            return Some(node);
         }
 
         None

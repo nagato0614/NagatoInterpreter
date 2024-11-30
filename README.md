@@ -122,7 +122,7 @@ iteration_statement ::= while '(' expression ')' compound_statement
 logical_or_expression ::= logical_and_expression
                           | logical_or_expression '||' logical_and_expression
 // AND 演算子
-logical_and_expression ::= equality_expression
+logical_and_expression ::= equality_exp[main.rs](src/main.rs)ression
                            | logical_and_expression '&&' equality_expression
 equality_expression ::= relational_expression
                         | equality_expression '==' relational_expression
@@ -151,9 +151,7 @@ unary_operator ::= '-'
 postfix_expression ::= primary_expression                               // 単項演算子
                        | identifier                                     // 変数
                        | identifier '[' logical_or_expression ']'       // 配列アクセス
-                       | identifier '(' argument_expression_list ')'    // 関数呼び出し
-// 関数の呼び出し
-argument_expression_list ::= {logical_or_expression}* {',' logical_or_expression}*
+                       | identifier '(' {logical_or_expression}* {',' logical_or_expression}* ')'    // 関数呼び出し
 
 primary_expression ::= constant
                        | '(' logical_or_expression ')'
@@ -164,7 +162,7 @@ constant ::= integer_constant
              | floating_constant
 
 // 宣言周りの定義
-declaration ::=  type_specifier {init_declarator}*
+declaration ::=  type_specifier init_declarator
 init_declarator ::= direct_declarator                      // 宣言だけ
                     | direct_declarator '=' logical_or_expression    // 初期化付きの宣言
 direct_declarator ::= identifier                           // 変数宣言 
