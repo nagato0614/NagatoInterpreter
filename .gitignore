@@ -91,3 +91,4 @@ fabric.properties
 # Added by cargo
 
 target
+*.out

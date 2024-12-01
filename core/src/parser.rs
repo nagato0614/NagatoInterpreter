@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
-use crate::lexical::{Constant, Token};
+use crate::lexical::{Constant, Token, UnaryOperator};
 use crate::lexical::Operator;
 
 #[derive(Debug, Clone)]
@@ -23,6 +23,10 @@ impl FunctionCall
 
     pub fn add_argument(&mut self, argument: Rc<RefCell<Node>>) {
         self.arguments.push(argument);
+    }
+    
+    pub fn name(&self) -> &String {
+        &self.name
     }
 }
 
@@ -61,39 +65,17 @@ pub struct Declaration {
     initializer: Option<Rc<RefCell<Node>>>,
 }
 
-impl Declaration
-{
-    pub fn new() -> Self {
-        Declaration {
-            type_specifier: Token::Unknown,
-            identify: Token::Unknown,
-            initializer: None,
-        }
-    }
-
-    pub fn set_type_specifier(&mut self, type_specifier: Token) {
-        self.type_specifier = type_specifier;
-    }
-
-    pub fn set_identify(&mut self, identify: Token) {
-        self.identify = identify;
-    }
-
-    pub fn set_initializer(&mut self, initializer: Rc<RefCell<Node>>) {
-        self.initializer = Some(initializer);
-    }
-}
-
 #[derive(Debug, Clone)]
 pub enum Leaf
 {
     Token(Token),
     Node(Rc<RefCell<Node>>),
-    Declaration(Declaration),
+    Declaration(Token),
     FunctionDefinition,
-    UnaryExpression,
+    UnaryExpression(UnaryOperator),
     FunctionCall(FunctionCall),
     ArrayAccess(ArrayAccess),
+    ParenthesizedExpression,
 }
 
 /// 構文木
@@ -115,6 +97,19 @@ impl Node {
         }
     }
 
+    pub fn val(&self) -> Option<&Leaf> {
+        self.val.as_ref()
+    }
+
+    pub fn lhs(&self) -> Option<&Rc<RefCell<Node>>> {
+        self.lhs.as_ref()
+    }
+
+    pub fn rhs(&self) -> Option<&Rc<RefCell<Node>>> {
+        self.rhs.as_ref()
+    }
+
+
     pub fn show_node(root: &Node)
     {
         if let Some(leaf) = &root.val {
@@ -123,20 +118,25 @@ impl Node {
                     println!("{:?}", token);
                 }
                 Leaf::Declaration(declaration) => {
-                    println!("Declaration");
-                    println!("type_specifier : {:?}", declaration.type_specifier);
-                    println!("identify : {:?}", declaration.identify);
-                    
-                    if let Some(initializer) = &declaration.initializer {
-                        print!("initializer : ");
-                        Node::show_node(&initializer.borrow());
-                    }
+                    println!("Declaration [{:?}]", declaration);
                 }
                 Leaf::FunctionDefinition => {
                     println!("FunctionDefinition");
                 }
-                _ => {
-                    println!("Unknown");
+                Leaf::UnaryExpression(operator) => {
+                    println!("UnaryExpression [{:?}]", operator);
+                }
+                Leaf::FunctionCall(function_call) => {
+                    println!("FunctionCall [{:?}]", function_call);
+                }
+                Leaf::ArrayAccess(array_access) => {
+                    println!("ArrayAccess [{:?}]", array_access);
+                }
+                Leaf::ParenthesizedExpression => {
+                    println!("ParenthesizedExpression");
+                }
+                Leaf::Node(node) => {
+                    Node::show_node(&node.borrow());
                 }
             }
         }
@@ -186,6 +186,10 @@ impl Parser
         }
     }
 
+    pub fn root(&self) -> &Rc<RefCell<Node>> {
+        self.roots.first().unwrap()
+    }
+
     fn get_next_token(&mut self) -> Option<Token>
     {
         if self.token_index < self.tokens.len() {
@@ -201,7 +205,7 @@ impl Parser
     fn get_next_token_without_increment(&self) -> Option<Token>
     {
         if self.token_index < self.tokens.len() {
-            println!("token_index w: {}, Token : {:?}", self.token_index, self
+            println!("token_index without: {}, Token : {:?}", self.token_index, self
                 .tokens[self
                 .token_index]);
             Some(self.tokens[self.token_index].clone())
@@ -257,37 +261,53 @@ impl Parser
     {
         // グローバル変数定義をパースする
         let mut root = Rc::new(RefCell::new(Node::new()));
-        let mut declaration = Declaration::new();
 
-        if let Some(type_spec) = self.get_next_token() {
-            declaration.set_type_specifier(type_spec);
-        }
-        if let Some(right_node) = self.get_next_token() {
-            declaration.set_identify(right_node);
-        }
-        
-        // 次のトークンが '=' の場合は initializer をパースする
-        if let Some(Token::Assign) = self.get_next_token_without_increment() {
-            self.token_index_increment();
-            
-            let decl_root = Rc::new(RefCell::new(Node::new()));
-
-            if let Some(initializer) = self.logical_or_expression(&decl_root) {
-                declaration.set_initializer(initializer);
-            }
-            else { 
-                panic!("初期化子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
-            }
-        }
-
-        // 最後に ';' が来ることを確認
-        if let Some(Token::Semicolon) = self.get_next_token() {
-            // 何もしない
+        // declaration の値として型が入る
+        if let Some(type_specifier) = self.get_next_token() {
+            root.borrow_mut().set_val(Leaf::Declaration(type_specifier));
         } else {
-            panic!("';' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+            panic!("型が見つかりませんでした : {:?}", self.tokens[self.token_index]);
         }
-        
-        root.borrow_mut().set_val(Leaf::Declaration(declaration));
+
+        // declaration の左辺として識別子が入る
+        if let Some(Token::Identifier(identifier)) = self.get_next_token() {
+            let left_node = Rc::new(RefCell::new(Node::new()));
+            left_node.borrow_mut().set_val(Leaf::Token(Token::Identifier(identifier)));
+            root.borrow_mut().set_lhs(left_node);
+        } else {
+            panic!("識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+        }
+
+        // 次のトークンが '=' かどうか
+        if let Some(next_token) = self.get_next_token()
+        {
+            match next_token
+            {
+                Token::Assign => {
+                    // '=' の場合は initializer をパースする
+                    if let Some(initializer) = self.logical_or_expression(&root) {
+                        println!("initializer");
+                        root.borrow_mut().set_rhs(initializer);
+                    }
+
+                    // ';' が来ることを確認
+                    if let Some(Token::Semicolon) = self.get_next_token() {
+                        println!("semicolon");
+                        // 何もしない
+                    } else {
+                        panic!("';' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+                    }
+                }
+                Token::Semicolon => {
+                    // 何もしない
+                }
+                _ => {
+                    panic!("初期化子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+                }
+            }
+        } else {
+            panic!("トークンがありません");
+        }
 
         self.roots.push(root);
     }
@@ -349,13 +369,14 @@ impl Parser
         let mut node = Rc::new(RefCell::new(Node::new()));
         node.borrow_mut().set_parent(parent);
 
-        if let Some(left_node) = self.logical_and_expression(&node) {
+        if let Some(left_node) = self.logical_and_expression(&parent) {
 
             // 次のトークンが '||' の場合は logical_or_expression をパースする
             if let Some(Token::Operator(Operator::LogicalOr)) = self.get_next_token_without_increment() {
                 println!("logical_or_expression");
                 node.borrow_mut().set_val(Leaf::Token(Token::Operator(Operator::LogicalOr)));
                 node.borrow_mut().set_lhs(left_node);
+                self.token_index_increment();
 
                 if let Some(right_node) = self.logical_or_expression(&node) {
                     node.borrow_mut().set_rhs(right_node);
@@ -496,7 +517,7 @@ impl Parser
                     _ => None,
                 })
             {
-                println!("additive_expression");
+                self.token_index_increment();
                 node.borrow_mut().set_val(Leaf::Token(Token::Operator(operator)));
                 node.borrow_mut().set_lhs(left_node);
 
@@ -531,7 +552,7 @@ impl Parser
                     _ => None,
                 })
             {
-                println!("multiplicative_expression");
+                self.token_index_increment();
                 node.borrow_mut().set_val(Leaf::Token(Token::Operator(operator)));
                 node.borrow_mut().set_lhs(left_node);
 
@@ -563,13 +584,17 @@ impl Parser
 
         if let Some(Token::UnaryOperator(operator)) = next_token {
             // 単項演算子の場合
-            node.borrow_mut().set_val(Leaf::UnaryExpression);
-            self.primary_expression(&mut node);
+            node.borrow_mut().set_val(Leaf::UnaryExpression(operator));
+            self.token_index_increment();
+           let left_node = self.postfix_expression(&mut node);
+            if let Some(left_node) = left_node {
+                node.borrow_mut().set_lhs(left_node);
+            }
         } else {
             // 単項演算子でない場合は postfix_expression をパースする
             let postfix_node = self.postfix_expression(&mut node);
             if let Some(postfix_node) = postfix_node {
-                node.borrow_mut().set_val(Leaf::Node(postfix_node));
+                node = postfix_node;
             }
         }
 
@@ -578,7 +603,7 @@ impl Parser
 
     fn postfix_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
-        let node = Rc::new(RefCell::new(Node::new()));
+        let mut node = Rc::new(RefCell::new(Node::new()));
         node.borrow_mut().set_parent(parent);
 
 
@@ -600,15 +625,35 @@ impl Parser
 
                                 // ')' が来るまで argument_expression_list を呼び出す
                                 loop {
-                                    let next_token = self.get_next_token();
+                                    let next_token = self.get_next_token_without_increment();
+                                    
+                                    // 引数がない場合は ')' が来る
                                     if let Some(Token::RightParen) = next_token {
+                                        self.token_index_increment();
                                         break;
                                     }
 
                                     let logical_or_expression_node
                                         = self.logical_or_expression(&node);
+
                                     if let Some(arg) = logical_or_expression_node {
+                                        println!("arg : {:?}", arg);
                                         function_call.add_argument(arg);
+                                    }
+
+                                    // ',' が来ることを確認
+                                    match self.get_next_token_without_increment()
+                                    {
+                                        Some(Token::Comma) => {
+                                            self.token_index_increment();
+                                        }
+                                        None => {
+                                            panic!("次のトークンがありません");
+                                        }
+                                        _ => {
+                                            // 何もしない
+                                            println!("skip : {:?}", self.tokens[self.token_index]);
+                                        }
                                     }
                                 }
 
@@ -645,7 +690,7 @@ impl Parser
                     // primary_expression を呼び出す
                     let primary_node = self.primary_expression(&node);
                     if let Some(primary_node) = primary_node {
-                        node.borrow_mut().set_val(Leaf::Node(primary_node));
+                        node = primary_node;
                     }
                 }
             }
@@ -679,10 +724,12 @@ impl Parser
                     node.borrow_mut().set_val(Leaf::Token(Token::Constant(constant)));
                 }
                 Token::LeftParen => {
+                    node.borrow_mut().set_val(Leaf::ParenthesizedExpression);
+
                     // '(' が来た場合は logical_or_expression を呼び出す
                     let logical_or_expression_node = self.logical_or_expression(&node);
                     if let Some(logical_or_expression_node) = logical_or_expression_node {
-                        node.borrow_mut().set_val(Leaf::Node(logical_or_expression_node));
+                        node.borrow_mut().set_lhs(logical_or_expression_node);
                     }
 
                     // ')' が来ることを確認

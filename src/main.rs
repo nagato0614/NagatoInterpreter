@@ -1,8 +1,9 @@
+use core::TreeViewer::TreeViewer;
 use core::lexical::Lexer;
 use core::parser::Parser;
 
 fn main() {
-    let program = String::from("int a = b();");
+    let program = String::from("int a = -(1 + 2 * 3 / 4) + 5 || 1 + b(1);");
 
     let mut lexer = Lexer::new(program);
     lexer.tokenize();
@@ -17,4 +18,9 @@ fn main() {
 
     println!("----------------------");
     parser.show_tree();
+
+
+    let mut tree_viewer = TreeViewer::new();
+    tree_viewer.make_tree(parser.root());
+    tree_viewer.output_dot();
 }
