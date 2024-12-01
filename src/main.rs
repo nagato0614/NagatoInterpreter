@@ -1,4 +1,4 @@
-use core::TreeViewer::TreeViewer;
+use core::tree_viewer::TreeViewer;
 use core::lexical::Lexer;
 use core::parser::Parser;
 
