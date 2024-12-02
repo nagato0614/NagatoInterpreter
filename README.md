@@ -59,7 +59,6 @@ int main() {
 - ポインタは取り扱わない
 - 構造体は取り扱わない
 - マクロは取り扱わない
-- 配列の取り扱いはしない
 - プリプロセッサは取り扱わない
 - ヘッダファイルは取り扱わない
 - switch_case文は取り扱わない
@@ -150,7 +149,6 @@ unary_operator ::= '-'
                      
 postfix_expression ::= primary_expression                               // 単項演算子
                        | identifier                                     // 変数
-                       | identifier '[' logical_or_expression ']'       // 配列アクセス
                        | identifier '(' {logical_or_expression}* {',' logical_or_expression}* ')'    // 関数呼び出し
 
 primary_expression ::= constant

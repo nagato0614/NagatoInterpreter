@@ -31,29 +31,6 @@ impl FunctionCall
 }
 
 #[derive(Debug, Clone)]
-pub struct ArrayAccess {
-    // 配列名
-    name: String,
-
-    // インデックス (logical_or_expression)
-    root: Rc<RefCell<Node>>,
-}
-
-impl ArrayAccess
-{
-    pub fn new(name: String) -> Self {
-        ArrayAccess {
-            name,
-            root: Rc::new(RefCell::new(Node::new())),
-        }
-    }
-
-    pub fn set_root(&mut self, root: Rc<RefCell<Node>>) {
-        self.root = root;
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct Declaration {
     // 型
     type_specifier: Token,
@@ -74,7 +51,7 @@ pub enum Leaf
     FunctionDefinition,
     UnaryExpression(UnaryOperator),
     FunctionCall(FunctionCall),
-    ArrayAccess(ArrayAccess),
+    ArrayAccess,
     ParenthesizedExpression,
 }
 
@@ -129,8 +106,8 @@ impl Node {
                 Leaf::FunctionCall(function_call) => {
                     println!("FunctionCall [{:?}]", function_call);
                 }
-                Leaf::ArrayAccess(array_access) => {
-                    println!("ArrayAccess [{:?}]", array_access);
+                Leaf::ArrayAccess => {
+                    println!("ArrayAccess [{:?}]", leaf);
                 }
                 Leaf::ParenthesizedExpression => {
                     println!("ParenthesizedExpression");
@@ -661,20 +638,31 @@ impl Parser
                             }
                             Token::LeftBracket => {
                                 // 配列の場合
-                                let mut array_access = ArrayAccess::new(identify);
+                                node.borrow_mut().set_val(Leaf::ArrayAccess);
+                                
+                                // 左側に識別子を設定
+                                let left_node = Rc::new(RefCell::new(Node::new()));
+                                left_node.borrow_mut().set_val(Leaf::Token(Token::Identifier(identify)));
+                                node.borrow_mut().set_lhs(left_node);
 
                                 // ']' のときはからの配列として扱う
-                                if let Some(Token::RightBracket) = self.get_next_token() {
+                                if let Some(Token::RightBracket) = self.get_next_token_without_increment() {
                                     // 何もしない
+                                    self.token_index_increment();
                                 } else {
                                     // 配列の index を取得
                                     let logical_or_expression_node = self.logical_or_expression(&node);
                                     if let Some(index) = logical_or_expression_node {
-                                        array_access.set_root(index);
+                                        node.borrow_mut().set_rhs(index);
+                                    }
+                                    
+                                    // ']' が来ることを確認
+                                    if let Some(Token::RightBracket) = self.get_next_token() {
+                                        // 何もしない
+                                    } else {
+                                        panic!("']' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
                                     }
                                 }
-
-                                node.borrow_mut().set_val(Leaf::ArrayAccess(array_access));
                             }
                             _ => {
                                 // それ以外の場合は identifier として処理する

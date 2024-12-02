@@ -212,6 +212,16 @@ impl Lexer
                         self.add_token();
                         self.tokens.push(Token::Comma);
                     }
+                '[' =>
+                    {
+                        self.add_token();
+                        self.tokens.push(Token::LeftBracket);
+                    }
+                ']' =>
+                    {
+                        self.add_token();
+                        self.tokens.push(Token::RightBracket);
+                    }
                 '\n' =>
                     {
                         self.add_token();
@@ -230,6 +240,7 @@ impl Lexer
                                 {
                                     self.add_token();
                                     self.tokens.push(Token::Assign);
+                                    self.back_char();
                                 }
                         }
                     }
@@ -366,6 +377,22 @@ impl Lexer
         self.position += 1;
 
         result
+    }
+    
+    /// 次の文字を取得するが、文字列を進めない
+    fn peek_char(&self) -> Option<char>
+    {
+        if self.position >= self.sentence.len() {
+            return None;
+        }
+
+        self.sentence.chars().nth(self.position)
+    }
+    
+    /// 文字を一つ戻す
+    fn back_char(&mut self)
+    {
+        self.position -= 1;
     }
 
     pub fn tokens(&self) -> &Vec<Token> {
