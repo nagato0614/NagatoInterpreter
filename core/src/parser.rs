@@ -1,7 +1,7 @@
+use crate::lexical::Operator;
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
-use crate::lexical::{Constant, Token, UnaryOperator};
-use crate::lexical::Operator;
+use crate::lexical::{Constant, Token, Type, UnaryOperator};
 
 #[derive(Debug, Clone)]
 pub struct FunctionCall {
@@ -45,14 +45,22 @@ pub struct Declaration {
 #[derive(Debug, Clone)]
 pub enum Leaf
 {
-    Token(Token),
     Node(Rc<RefCell<Node>>),
-    Declaration(Token),
+    Declaration(Type),
     FunctionDefinition,
     UnaryExpression(UnaryOperator),
     FunctionCall(FunctionCall),
     ArrayAccess,
     ParenthesizedExpression,
+    
+    // 識別子
+    Identifier(String),
+    
+    // 演算子
+    Operator(Operator),
+    
+    // 定数
+    Constant(Constant),
 }
 
 /// 構文木
@@ -91,9 +99,6 @@ impl Node {
     {
         if let Some(leaf) = &root.val {
             match leaf {
-                Leaf::Token(token) => {
-                    println!("{:?}", token);
-                }
                 Leaf::Declaration(declaration) => {
                     println!("Declaration [{:?}]", declaration);
                 }
@@ -114,6 +119,15 @@ impl Node {
                 }
                 Leaf::Node(node) => {
                     Node::show_node(&node.borrow());
+                },
+                Leaf::Identifier(identifier) => {
+                    println!("Identifier [{:?}]", identifier);
+                }
+                Leaf::Operator(operator) => {
+                    println!("Operator [{:?}]", operator);
+                }
+                Leaf::Constant(constant) => {
+                    println!("Constant [{:?}]", constant);
                 }
             }
         }
@@ -240,7 +254,7 @@ impl Parser
         let mut root = Rc::new(RefCell::new(Node::new()));
 
         // declaration の値として型が入る
-        if let Some(type_specifier) = self.get_next_token() {
+        if let Some(Token::Type(type_specifier)) = self.get_next_token() {
             root.borrow_mut().set_val(Leaf::Declaration(type_specifier));
         } else {
             panic!("型が見つかりませんでした : {:?}", self.tokens[self.token_index]);
@@ -249,7 +263,7 @@ impl Parser
         // declaration の左辺として識別子が入る
         if let Some(Token::Identifier(identifier)) = self.get_next_token() {
             let left_node = Rc::new(RefCell::new(Node::new()));
-            left_node.borrow_mut().set_val(Leaf::Token(Token::Identifier(identifier)));
+            left_node.borrow_mut().set_val(Leaf::Identifier(identifier));
             root.borrow_mut().set_lhs(left_node);
         } else {
             panic!("識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
@@ -289,58 +303,6 @@ impl Parser
         self.roots.push(root);
     }
 
-    fn type_specifier(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
-    {
-        let mut node = Rc::new(RefCell::new(Node::new()));
-        node.borrow_mut().set_parent(parent);
-
-        if let Some(Token::Type(type_specifier)) = self.get_next_token()
-        {
-            node.borrow_mut().set_val(Leaf::Token(Token::Type(type_specifier)));
-        } else {
-            panic!("型が見つかりませんでした : {:?}", self.tokens[self.token_index]);
-        }
-
-        Some(node)
-    }
-
-    fn init_declarator(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
-    {
-        let mut node = Rc::new(RefCell::new(Node::new()));
-        node.borrow_mut().set_parent(parent);
-
-        if let Some(Token::Identifier(identify)) = self.get_next_token() {
-            node.borrow_mut().set_val(Leaf::Token(Token::Identifier(identify)));
-        } else {
-            panic!("識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
-        }
-
-        // 次のトークンが '='の場合は initializer をパースする
-        match self.get_next_token().unwrap() {
-            Token::Assign => {
-                // 今作成した node を 左の子ノードとして設定する
-                let left_node = node.clone();
-                node.borrow_mut().set_lhs(left_node);
-                node.borrow_mut().set_val(Leaf::Token(Token::Assign));
-
-                // 右の子ノードを設定する
-                if let Some(right_node) = self.logical_or_expression(&node) {
-                    node.borrow_mut().set_rhs(right_node);
-                }
-            }
-            Token::Semicolon => {
-                // 何もせずスキップする
-                self.token_index += 1;
-            }
-            _ => {
-                panic!("初期化子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
-            }
-        }
-
-        Some(node)
-    }
-
-
     fn logical_or_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
         let mut node = Rc::new(RefCell::new(Node::new()));
@@ -351,7 +313,7 @@ impl Parser
             // 次のトークンが '||' の場合は logical_or_expression をパースする
             if let Some(Token::Operator(Operator::LogicalOr)) = self.get_next_token_without_increment() {
                 println!("logical_or_expression");
-                node.borrow_mut().set_val(Leaf::Token(Token::Operator(Operator::LogicalOr)));
+                node.borrow_mut().set_val(Leaf::Operator(Operator::LogicalOr));
                 node.borrow_mut().set_lhs(left_node);
                 self.token_index_increment();
 
@@ -381,7 +343,7 @@ impl Parser
             // 次のトークンが '&&' の場合は logical_and_expression をパースする
             if let Some(Token::Operator(Operator::LogicalAnd)) = self.get_next_token_without_increment() {
                 println!("logical_and_expression");
-                node.borrow_mut().set_val(Leaf::Token(Token::Operator(Operator::LogicalAnd)));
+                node.borrow_mut().set_val(Leaf::Operator(Operator::LogicalAnd));
                 node.borrow_mut().set_lhs(left_node);
 
                 // 再度 logical_and_expression を呼び出す
@@ -415,7 +377,7 @@ impl Parser
                 })
             {
                 println!("equality_expression");
-                node.borrow_mut().set_val(Leaf::Token(Token::Operator(operator)));
+                node.borrow_mut().set_val(Leaf::Operator(operator));
                 node.borrow_mut().set_lhs(left_node);
 
                 // 再帰的に equality_expression を呼び出す
@@ -459,7 +421,7 @@ impl Parser
                 })
             {
                 println!("relational_expression");
-                node.borrow_mut().set_val(Leaf::Token(Token::Operator(operator)));
+                node.borrow_mut().set_val(Leaf::Operator(operator));
                 node.borrow_mut().set_lhs(left_node);
 
                 // 再帰的に relational_expression を呼び出す
@@ -495,7 +457,7 @@ impl Parser
                 })
             {
                 self.token_index_increment();
-                node.borrow_mut().set_val(Leaf::Token(Token::Operator(operator)));
+                node.borrow_mut().set_val(Leaf::Operator(operator));
                 node.borrow_mut().set_lhs(left_node);
 
                 // 再帰的に additive_expression を呼び出す
@@ -530,7 +492,7 @@ impl Parser
                 })
             {
                 self.token_index_increment();
-                node.borrow_mut().set_val(Leaf::Token(Token::Operator(operator)));
+                node.borrow_mut().set_val(Leaf::Operator(operator));
                 node.borrow_mut().set_lhs(left_node);
 
                 // 再帰的に multiplicative_expression を呼び出す
@@ -642,7 +604,7 @@ impl Parser
                                 
                                 // 左側に識別子を設定
                                 let left_node = Rc::new(RefCell::new(Node::new()));
-                                left_node.borrow_mut().set_val(Leaf::Token(Token::Identifier(identify)));
+                                left_node.borrow_mut().set_val(Leaf::Identifier(identify));
                                 node.borrow_mut().set_lhs(left_node);
 
                                 // ']' のときはからの配列として扱う
@@ -666,7 +628,7 @@ impl Parser
                             }
                             _ => {
                                 // それ以外の場合は identifier として処理する
-                                node.borrow_mut().set_val(Leaf::Token(Token::Identifier(identify)));
+                                node.borrow_mut().set_val(Leaf::Identifier(identify));
                             }
                         }
 
@@ -709,7 +671,7 @@ impl Parser
             {
                 Token::Constant(constant) => {
                     // 定数の場合
-                    node.borrow_mut().set_val(Leaf::Token(Token::Constant(constant)));
+                    node.borrow_mut().set_val(Leaf::Constant(constant));
                 }
                 Token::LeftParen => {
                     node.borrow_mut().set_val(Leaf::ParenthesizedExpression);
