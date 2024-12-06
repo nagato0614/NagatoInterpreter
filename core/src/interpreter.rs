@@ -2,7 +2,7 @@ use std::any::Any;
 use std::cell::RefCell;
 use std::rc::Rc;
 use crate::interpreter::VariableType::Int;
-use crate::lexical::{Operator, Token};
+use crate::lexical::{Constant, Operator, Token, UnaryOperator};
 use crate::parser::{Leaf, Node};
 
 #[derive(Debug, Clone)]
@@ -81,12 +81,43 @@ impl Interpreter
         {
             match val
             {
+                // 代入
                 Leaf::Operator(op) =>
                     {
                         if let Some((lhs, rhs))
                             = node.borrow().get_lhs_and_rhs()
                         {
                             return self.operator(op, lhs, rhs);
+                        }
+                    }
+
+                // 定数
+                Leaf::Constant(value) =>
+                    {
+                        return self.constant(value);
+                    }
+
+                // 識別子
+                Leaf::Identifier(identifier) =>
+                    {
+                        return self.identifier(identifier);
+                    }
+
+                // 単項演算子
+                Leaf::UnaryExpression(op) =>
+                    {
+                        if let Some(lhs) = node.borrow().lhs()
+                        {
+                            return self.unary_expression(op, lhs);
+                        }
+                    }
+                
+                // 括弧で囲まれた式
+                Leaf::ParenthesizedExpression =>
+                    {
+                        if let Some(lhs) = node.borrow().lhs()
+                        {
+                            return self.statement(lhs);
                         }
                     }
                 _ => {
@@ -96,6 +127,34 @@ impl Interpreter
         }
 
         panic!("未対応のノードです");
+    }
+
+    fn unary_expression(&mut self, op: &UnaryOperator, lhs: &Rc<RefCell<Node>>) -> VariableType
+    {
+        unimplemented!("未実装です");
+    }
+
+    fn identifier(&mut self, identifier: &str) -> VariableType
+    {
+        unimplemented!("未実装です");
+    }
+
+    fn constant(&mut self, value: &Constant) -> VariableType
+    {
+        match value
+        {
+            Constant::Integer(val) =>
+                {
+                    VariableType::Int(*val)
+                }
+            Constant::Float(val) =>
+                {
+                    VariableType::Float(*val)
+                }
+            _ => {
+                panic!("未対応の定数です : {:?}", value);
+            }
+        }
     }
 
 

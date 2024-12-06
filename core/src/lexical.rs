@@ -64,7 +64,7 @@ pub enum Type {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Constant {
-    Integer(i64),
+    Integer(i32),
     Float(f64),
 }
 
@@ -378,7 +378,7 @@ impl Lexer
 
         result
     }
-    
+
     /// 次の文字を取得するが、文字列を進めない
     fn peek_char(&self) -> Option<char>
     {
@@ -388,7 +388,7 @@ impl Lexer
 
         self.sentence.chars().nth(self.position)
     }
-    
+
     /// 文字を一つ戻す
     fn back_char(&mut self)
     {
