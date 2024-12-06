@@ -103,73 +103,67 @@ impl Interpreter
     {
         let lhs = self.statement(lhs);
         let rhs = self.statement(rhs);
-
+        let mut result: VariableType = Int(0);
         match op
         {
             Operator::LogicalOr =>
                 {
-                    let result = self.logical_or(lhs, rhs);
-                    result
+                    result = self.logical_or(lhs, rhs);
                 }
             Operator::LogicalAnd =>
                 {
-                    let result = self.logical_and(lhs, rhs);
-                    result
+                    result = self.logical_and(lhs, rhs);
                 }
             Operator::Equal =>
                 {
-                    let result = self.equal(lhs, rhs);
-                    result
+                    result = self.equal(lhs, rhs);
                 }
             Operator::NotEqual =>
                 {
-                    let result = self.not_equal(lhs, rhs);
-                    result
+                    result = self.not_equal(lhs, rhs);
                 }
             Operator::LessThan =>
                 {
-                    let result = self.less_than(lhs, rhs);
-                    result
+                    result = self.less_than(lhs, rhs);
                 }
             Operator::GreaterThan =>
                 {
-                    let result = self.greater_than(lhs, rhs);
-                    result
+                    result = self.greater_than(lhs, rhs);
                 }
             Operator::LessThanOrEqual =>
                 {
-                    let result = self.less_than_or_equal(lhs, rhs);
-                    result
+                    result = self.less_than_or_equal(lhs, rhs);
                 }
             Operator::GreaterThanOrEqual =>
                 {
-                    let result = self.greater_than_or_equal(lhs, rhs);
-                    result
+                    result = self.greater_than_or_equal(lhs, rhs);
                 }
             Operator::Plus =>
                 {
-                    let result = self.add(lhs, rhs);
-                    result
+                    result = self.add(lhs, rhs);
                 }
             Operator::Minus =>
                 {
-                    let result = self.sub(lhs, rhs);
-                    result
+                    result = self.sub(lhs, rhs);
                 }
             Operator::Multiply =>
                 {
-                    let result = self.mul(lhs, rhs);
-                    result
+                    result = self.mul(lhs, rhs);
                 }
             Operator::Divide =>
                 {
-                    let result = self.div(lhs, rhs);
-                    result
+                    result = self.div(lhs, rhs);
+                }
+            Operator::Modulo =>
+                {
+                    result = self.remainder(lhs, rhs);
                 }
             _ => {
                 panic!("未対応の演算子です : {:?}", op);
             }
         }
+
+        result
     }
 
     // 加算演算子　'+'
@@ -287,6 +281,47 @@ impl Interpreter
             (VariableType::Float(lhs), VariableType::Float(rhs)) =>
                 {
                     Int((lhs / rhs) as i32)
+                }
+            _ => {
+                panic!("未対応の型です");
+            }
+        }
+    }
+
+    // 余り演算子　'%'
+    fn remainder(&mut self, lhs: VariableType, rhs: VariableType) -> VariableType
+    {
+        // 右辺値が0の場合はエラー
+        match rhs
+        {
+            VariableType::Int(val) if val == 0 =>
+                {
+                    panic!("0で割ることはできません");
+                }
+            VariableType::Float(val) if val == 0.0 =>
+                {
+                    panic!("0で割ることはできません");
+                }
+            _ => {}
+        }
+
+        match (lhs, rhs)
+        {
+            (VariableType::Int(lhs), VariableType::Int(rhs)) =>
+                {
+                    Int(lhs % rhs)
+                }
+            (VariableType::Int(lhs), VariableType::Float(rhs)) =>
+                {
+                    Int(lhs % rhs as i32)
+                }
+            (VariableType::Float(lhs), VariableType::Int(rhs)) =>
+                {
+                    Int((lhs % rhs as f64) as i32)
+                }
+            (VariableType::Float(lhs), VariableType::Float(rhs)) =>
+                {
+                    Int((lhs % rhs) as i32)
                 }
             _ => {
                 panic!("未対応の型です");
