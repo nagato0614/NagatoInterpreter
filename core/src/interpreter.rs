@@ -65,7 +65,7 @@ impl Interpreter
                         {
                             let identifier = self.identifier_name(lhs);
 
-                            // 
+                            //
                         }
                     }
                 _ => {
@@ -111,7 +111,7 @@ impl Interpreter
                             return self.unary_expression(op, lhs);
                         }
                     }
-                
+
                 // 括弧で囲まれた式
                 Leaf::ParenthesizedExpression =>
                     {
@@ -131,7 +131,41 @@ impl Interpreter
 
     fn unary_expression(&mut self, op: &UnaryOperator, lhs: &Rc<RefCell<Node>>) -> VariableType
     {
-        unimplemented!("未実装です");
+        let lhs = self.statement(lhs);
+        match op
+        {
+            UnaryOperator::Minus =>
+                {
+                    match lhs
+                    {
+                        VariableType::Int(val) =>
+                            {
+                                Int(-val)
+                            }
+                        VariableType::Float(val) =>
+                            {
+                                Int(-val as i32)
+                            }
+                    }
+                }
+            UnaryOperator::LogicalNot =>
+                {
+                    match lhs
+                    {
+                        VariableType::Int(val) =>
+                            {
+                                Int(if val == 0 { 1 } else { 0 })
+                            }
+                        VariableType::Float(val) =>
+                            {
+                                Int(if val == 0.0 { 1 } else { 0 })
+                            }
+                    }
+                }
+            _ => {
+                panic!("未対応の演算子です : {:?}", op);
+            }
+        }
     }
 
     fn identifier(&mut self, identifier: &str) -> VariableType

@@ -124,7 +124,7 @@ impl Token
 
             // 数値の場合
             _ if keyword.parse::<i64>().is_ok() =>
-                Some(Token::Constant(Constant::Integer(keyword.parse::<i64>().unwrap()))),
+                Some(Token::Constant(Constant::Integer(keyword.parse::<i32>().unwrap()))),
             _ if keyword.parse::<f64>().is_ok() =>
                 Some(Token::Constant(Constant::Float(keyword.parse::<f64>().unwrap()))),
             _ => None,
