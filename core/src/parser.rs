@@ -24,7 +24,7 @@ impl FunctionCall
     pub fn add_argument(&mut self, argument: Rc<RefCell<Node>>) {
         self.arguments.push(argument);
     }
-    
+
     pub fn name(&self) -> &String {
         &self.name
     }
@@ -52,13 +52,13 @@ pub enum Leaf
     FunctionCall(FunctionCall),
     ArrayAccess,
     ParenthesizedExpression,
-    
+
     // 識別子
     Identifier(String),
-    
+
     // 演算子
     Operator(Operator),
-    
+
     // 定数
     Constant(Constant),
 }
@@ -94,6 +94,11 @@ impl Node {
         self.rhs.as_ref()
     }
 
+    pub fn get_lhs_and_rhs(&self)
+                              -> Option<(&Rc<RefCell<Node>>, &Rc<RefCell<Node>>)>
+    {
+        self.lhs().zip(self.rhs())
+    }
 
     pub fn show_node(root: &Node)
     {
@@ -119,7 +124,7 @@ impl Node {
                 }
                 Leaf::Node(node) => {
                     Node::show_node(&node.borrow());
-                },
+                }
                 Leaf::Identifier(identifier) => {
                     println!("Identifier [{:?}]", identifier);
                 }
@@ -525,7 +530,7 @@ impl Parser
             // 単項演算子の場合
             node.borrow_mut().set_val(Leaf::UnaryExpression(operator));
             self.token_index_increment();
-           let left_node = self.postfix_expression(&mut node);
+            let left_node = self.postfix_expression(&mut node);
             if let Some(left_node) = left_node {
                 node.borrow_mut().set_lhs(left_node);
             }
@@ -565,7 +570,7 @@ impl Parser
                                 // ')' が来るまで argument_expression_list を呼び出す
                                 loop {
                                     let next_token = self.get_next_token_without_increment();
-                                    
+
                                     // 引数がない場合は ')' が来る
                                     if let Some(Token::RightParen) = next_token {
                                         self.token_index_increment();
@@ -601,7 +606,7 @@ impl Parser
                             Token::LeftBracket => {
                                 // 配列の場合
                                 node.borrow_mut().set_val(Leaf::ArrayAccess);
-                                
+
                                 // 左側に識別子を設定
                                 let left_node = Rc::new(RefCell::new(Node::new()));
                                 left_node.borrow_mut().set_val(Leaf::Identifier(identify));
@@ -617,7 +622,7 @@ impl Parser
                                     if let Some(index) = logical_or_expression_node {
                                         node.borrow_mut().set_rhs(index);
                                     }
-                                    
+
                                     // ']' が来ることを確認
                                     if let Some(Token::RightBracket) = self.get_next_token() {
                                         // 何もしない
@@ -710,6 +715,7 @@ impl Parser
         }
     }
 }
+
 
 #[cfg(test)]
 mod tests {
