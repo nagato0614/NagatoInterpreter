@@ -306,6 +306,22 @@ impl Lexer
                             self.tokens.push(Token::UnaryOperator(UnaryOperator::Minus));
                         }
                     }
+                '&' =>
+                    {
+                        // もう一文字取得して、'&' かどうか判定
+                        let next_char = self.next_char();
+                        match next_char {
+                            Some('&') =>
+                                {
+                                    self.add_token();
+                                    self.tokens.push(Token::Operator(Operator::LogicalAnd));
+                                }
+                            _ =>
+                                {
+                                    panic!("Unknown character: {:?}", c);
+                                }
+                        }
+                    }
                 '>' | '<' =>
                     {
                         // もう一文字取得して、'=' かどうか判定

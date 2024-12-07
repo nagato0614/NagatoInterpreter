@@ -1,11 +1,10 @@
-use std::any::Any;
+use crate::interpreter::VariableType::Int;
+use crate::lexical::{Constant, Operator, UnaryOperator, ValueType};
+use crate::parser::{Leaf, Node};
 use std::cell::RefCell;
 use std::rc::Rc;
-use crate::interpreter::VariableType::Int;
-use crate::lexical::{Constant, Operator, Token, UnaryOperator, ValueType};
-use crate::parser::{Leaf, Node};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Value
 {
     name: String,
@@ -22,22 +21,33 @@ impl Value
             value,
         }
     }
+    
+    pub fn name(&self) -> &String
+    {
+        &self.name
+    }
+    
+    pub fn value(&self) -> &VariableType
+    {
+        &self.value
+    }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Array
 {
     name: String,
     values: Vec<VariableType>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum VariableType
 {
     Int(i32),
     Float(f64),
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum Variable {
     Value(Value),
     Array(Array),
@@ -59,6 +69,11 @@ impl Interpreter
             roots: roots.clone(),
             variables: Vec::new(),
         }
+    }
+    
+    pub fn variables(&self) -> &Vec<Variable>
+    {
+        &self.variables
     }
 
     pub fn run(&mut self)

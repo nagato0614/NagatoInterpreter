@@ -1,3 +1,6 @@
+#!/Users/toru/.pyenv/shims/python3
+
+
 import os
 
 # カレントディレクトリ以下の指定したファイルタイプの行数をカウントする
