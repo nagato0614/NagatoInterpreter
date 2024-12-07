@@ -2,7 +2,6 @@ use crate::lexical::Operator;
 use std::cell::{Ref, RefCell};
 use std::rc::{Rc, Weak};
 use crate::lexical::{Constant, Token, ValueType, UnaryOperator};
-use std::collections::VecDeque;
 
 #[derive(Debug, Clone)]
 pub struct FunctionCall {
@@ -70,10 +69,10 @@ pub struct FunctionDefinition {
     identify: String,
 
     // 引数のリスト
-    arguments: VecDeque<Argument>,
+    arguments: Vec<Argument>,
 
     // 関数の中身
-    body: VecDeque<Rc<RefCell<Node>>>,
+    body: Vec<Rc<RefCell<Node>>>,
 }
 
 impl FunctionDefinition {
@@ -81,8 +80,8 @@ impl FunctionDefinition {
         FunctionDefinition {
             type_specifier: ValueType::Void,
             identify: String::new(),
-            arguments: VecDeque::new(),
-            body: VecDeque::new(),
+            arguments: Vec::new(),
+            body: Vec::new(),
         }
     }
 
@@ -99,11 +98,11 @@ impl FunctionDefinition {
     }
 
     pub fn add_argument(&mut self, type_specifier: ValueType, identify: String) {
-        self.arguments.push_back(Argument::new(type_specifier, identify));
+        self.arguments.push(Argument::new(type_specifier, identify));
     }
 
     pub fn add_body(&mut self, body: Rc<RefCell<Node>>) {
-        self.body.push_back(body);
+        self.body.push(body);
     }
 }
 
@@ -233,7 +232,7 @@ impl Node {
 #[derive(Debug, Clone)]
 pub struct Parser {
     tokens: Vec<Token>,
-    roots: VecDeque<Rc<RefCell<Node>>>,
+    roots: Vec<Rc<RefCell<Node>>>,
     token_index: usize,
 }
 
@@ -242,17 +241,17 @@ impl Parser
     pub fn new(tokens: Vec<Token>) -> Self {
         Parser {
             tokens,
-            roots: VecDeque::new(),
+            roots: Vec::new(),
             token_index: 0,
         }
     }
 
-    pub fn roots(&self) -> &VecDeque<Rc<RefCell<Node>>> {
+    pub fn roots(&self) -> &Vec<Rc<RefCell<Node>>> {
         &self.roots
     }
 
     pub fn root(&self) -> &Rc<RefCell<Node>> {
-        self.roots.front().unwrap()
+        self.roots.first().unwrap()
     }
 
     fn get_next_token(&mut self) -> Option<Token>
@@ -313,13 +312,13 @@ impl Parser
             self.function_definition();
         } else {
             println!("declaration : {}", self.token_index);
-            self.declaration();
+            let root = self.declaration();
+            self.roots.push(root);
         }
     }
 
     fn function_definition(&mut self)
     {
-        let mut root = Rc::new(RefCell::new(Node::new()));
         let mut function_definition = FunctionDefinition::new();
 
         // 関数定義の型を取得
@@ -353,15 +352,14 @@ impl Parser
         }
 
         // 関数定義の本体を取得. '{', '}' の処理は compound_statement 内部で行う
-        self.compound_statement(&mut function_definition);
-
-        root.borrow_mut().set_val(Leaf::FunctionDefinition(function_definition));
-
-        self.roots.push_back(root);
+        let roots = self.compound_statement();
+        self.roots = roots;
     }
 
-    fn compound_statement(&mut self, function_definition: &mut FunctionDefinition)
+    fn compound_statement(&mut self) -> Vec<Rc<RefCell<Node>>>
     {
+        let mut roots: Vec<Rc<RefCell<Node>>> = Vec::new();
+
         // '{' が来ることを確認
         if let Some(Token::LeftBrace) = self.get_next_token() {
             // 何もしない
@@ -372,7 +370,7 @@ impl Parser
         // '}' が来るまで繰り返す
         while let Some(Token::RightBrace) = self.get_next_token_without_increment() {
             let root = self.block_item();
-            function_definition.add_body(root);
+            roots.push(root);
         }
 
         // '}' が来ることを確認
@@ -381,13 +379,31 @@ impl Parser
         } else {
             panic!("'}}' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
         }
+
+        roots
     }
 
     fn block_item(&mut self) -> Rc<RefCell<Node>>
     {
-        let mut node = Rc::new(RefCell::new(Node::new()));
+        let mut root = Rc::new(RefCell::new(Node::new()));
 
-        node
+        if let Some(next_token) = self.get_next_token_without_increment()
+        {
+            match next_token
+            {
+                // 変数定義の場合
+                Token::Type(type_specifier) => {
+                    root = self.declaration();
+                }
+
+                // 
+                _ => {
+                    panic!("次のトークンがありません : {:?}", self.tokens[self.token_index]);
+                }
+            }
+        }
+
+        root
     }
 
     /// 関数の引数リストを取得する. ')' が来るまで繰り返す
@@ -439,7 +455,7 @@ impl Parser
         }
     }
 
-    fn declaration(&mut self)
+    fn declaration(&mut self) -> Rc<RefCell<Node>>
     {
         // グローバル変数定義をパースする
         let mut root = Rc::new(RefCell::new(Node::new()));
@@ -490,8 +506,7 @@ impl Parser
         } else {
             panic!("トークンがありません");
         }
-
-        self.roots.push_back(root);
+        root
     }
 
     fn logical_or_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
