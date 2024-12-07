@@ -36,6 +36,9 @@ impl TreeViewer {
             Leaf::FunctionCall(func) => {
                 node_name = format!("{}: Function Call [{:?}]", self.node_index, func.name());
             }
+            Leaf::FunctionDefinition(func) => {
+                node_name = format!("{}: Function Definition [{:?}]", self.node_index, func.name());
+            }
             _ => {
                 node_name = format!("{}: {:?}", self.node_index, leaf);
             }

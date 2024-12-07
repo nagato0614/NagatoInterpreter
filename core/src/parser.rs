@@ -43,6 +43,24 @@ pub struct Declaration {
 }
 
 #[derive(Debug, Clone)]
+struct Argument {
+    // 型
+    type_specifier: ValueType,
+
+    // 識別子
+    identify: String,
+}
+
+impl Argument {
+    pub fn new(type_specifier: ValueType, identify: String) -> Self {
+        Argument {
+            type_specifier,
+            identify,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct FunctionDefinition {
     // 型
     type_specifier: ValueType,
@@ -51,7 +69,7 @@ pub struct FunctionDefinition {
     identify: String,
 
     // 引数のリスト
-    arguments: Vec<ValueType>,
+    arguments: Vec<Argument>,
 
     // 関数の中身
     body: Vec<Rc<RefCell<Node>>>,
@@ -67,6 +85,10 @@ impl FunctionDefinition {
         }
     }
 
+    pub fn name(&self) -> &String {
+        &self.identify
+    }
+    
     pub fn set_type_specifier(&mut self, type_specifier: ValueType) {
         self.type_specifier = type_specifier;
     }
@@ -75,8 +97,8 @@ impl FunctionDefinition {
         self.identify = identify;
     }
 
-    pub fn add_argument(&mut self, argument: ValueType) {
-        self.arguments.push(argument);
+    pub fn add_argument(&mut self, type_specifier: ValueType, identify: String) {
+        self.arguments.push(Argument::new(type_specifier, identify));
     }
 
     pub fn add_body(&mut self, body: Rc<RefCell<Node>>) {
@@ -319,18 +341,75 @@ impl Parser
             if let Some(Token::RightParen) = self.get_next_token_without_increment() {
                 self.token_index_increment();
             } else {
-                loop {
-                    // 引数の型を取得
-                    if let Some(Token::Type(type_specifier)) = self.get_next_token() {
-                        function_definition.add_argument(type_specifier);
-                    } else {
-                        panic!("型が見つかりませんでした : {:?}", self.tokens[self.token_index]);
-                    }
+                self.parameter_list(&mut function_definition);
+                // ')' が来ることを確認
+                if let Some(Token::RightParen) = self.get_next_token() {
+                    // 何もしない
+                } else {
+                    panic!("')' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
                 }
             }
         }
 
+        // 関数定義の本体を取得. '{', '}' の処理は compound_statement 内部で行う
+        self.compound_statement();
+
+        root.borrow_mut().set_val(Leaf::FunctionDefinition(function_definition));
+
         self.roots.push(root);
+    }
+
+    fn compound_statement(&mut self)
+    {
+        unimplemented!("compound_statement");
+    }
+
+    fn parameter_list(&mut self, function_definition: &mut FunctionDefinition)
+    {
+        // ')' が来る場合は何もしない
+        if let Some(Token::RightParen) = self.get_next_token_without_increment() {
+            return;
+        }
+
+        // 一個目の型が void の場合は何もせずに終了
+        if let Some(Token::Type(type_specifier)) = self.get_next_token_without_increment()
+        {
+            if type_specifier == ValueType::Void {
+                self.token_index_increment();
+                return;
+            }
+        }
+
+        loop {
+            if let Some(Token::Type(type_specifier)) = self.get_next_token_without_increment()
+            {
+                self.token_index_increment();
+
+                // 型がある場合は識別子が続く
+                if let Some(Token::Identifier(identifier)) = self.get_next_token()
+                {
+                    function_definition.add_argument(type_specifier, identifier);
+                } else {
+                    panic!("関数の引数の識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+                }
+            } else {
+                panic!("関数の型が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+            }
+
+            // 次のトークンが ',' か ')' かを調べて ',' なら次の引数を取得する
+            match self.get_next_token_without_increment()
+            {
+                Some(Token::Comma) => {
+                    self.token_index_increment();
+                }
+                Some(Token::RightParen) => {
+                    break;
+                }
+                _ => {
+                    panic!("次のトークンがありません : {:?}", self.tokens[self.token_index]);
+                }
+            }
+        }
     }
 
     fn declaration(&mut self)

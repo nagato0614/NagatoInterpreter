@@ -25,8 +25,8 @@ fn main() {
     tree_viewer.make_tree(parser.root());
     tree_viewer.output_dot();
 
-    println!("----------------------");
-    let mut interpreter = Interpreter::new(parser.roots());
-    interpreter.run();
-    interpreter.show_variables();
+    // println!("----------------------");
+    // let mut interpreter = Interpreter::new(parser.roots());
+    // interpreter.run();
+    // interpreter.show_variables();
 }
