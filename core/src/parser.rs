@@ -1,7 +1,7 @@
 use crate::lexical::Operator;
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
-use crate::lexical::{Constant, Token, Type, UnaryOperator};
+use crate::lexical::{Constant, Token, ValueType, UnaryOperator};
 
 #[derive(Debug, Clone)]
 pub struct FunctionCall {
@@ -46,7 +46,7 @@ pub struct Declaration {
 pub enum Leaf
 {
     Node(Rc<RefCell<Node>>),
-    Declaration(Type),
+    Declaration(ValueType),
     FunctionDefinition,
     UnaryExpression(UnaryOperator),
     FunctionCall(FunctionCall),
@@ -95,7 +95,7 @@ impl Node {
     }
 
     pub fn get_lhs_and_rhs(&self)
-                              -> Option<(&Rc<RefCell<Node>>, &Rc<RefCell<Node>>)>
+                           -> Option<(&Rc<RefCell<Node>>, &Rc<RefCell<Node>>)>
     {
         self.lhs().zip(self.rhs())
     }
@@ -180,6 +180,10 @@ impl Parser
             roots: Vec::new(),
             token_index: 0,
         }
+    }
+    
+    pub fn roots(&self) -> &Vec<Rc<RefCell<Node>>> {
+        &self.roots
     }
 
     pub fn root(&self) -> &Rc<RefCell<Node>> {
@@ -384,6 +388,7 @@ impl Parser
                 println!("equality_expression");
                 node.borrow_mut().set_val(Leaf::Operator(operator));
                 node.borrow_mut().set_lhs(left_node);
+                self.token_index_increment();
 
                 // 再帰的に equality_expression を呼び出す
                 if let Some(right_node) = self.equality_expression(&node) {
@@ -428,6 +433,7 @@ impl Parser
                 println!("relational_expression");
                 node.borrow_mut().set_val(Leaf::Operator(operator));
                 node.borrow_mut().set_lhs(left_node);
+                self.token_index_increment();
 
                 // 再帰的に relational_expression を呼び出す
                 if let Some(right_node) = self.relational_expression(&mut node) {
@@ -559,11 +565,13 @@ impl Parser
                     // index を進める
                     self.token_index_increment();
 
-                    if let Some(next_identify) = self.get_next_token()
+                    if let Some(next_identify) = self.get_next_token_without_increment()
                     {
                         match next_identify
                         {
                             Token::LeftParen => {
+                                self.token_index_increment();
+                                
                                 // 関数呼び出しの場合
                                 let mut function_call = FunctionCall::new(identify);
 

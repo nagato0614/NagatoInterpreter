@@ -56,7 +56,7 @@ impl Operator {
 
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Type {
+pub enum ValueType {
     Void,
     Int,
     Float,
@@ -76,7 +76,7 @@ pub enum Token {
     Constant(Constant),         // 定数
 
     // 型指定子
-    Type(Type),                // 型指定子
+    Type(ValueType),                // 型指定子
 
     // 区切り記号やその他の構造
     Comma,                     // `,`
@@ -112,9 +112,9 @@ impl Token
 {
     pub fn from_keyword(keyword: &str) -> Option<Token> {
         match keyword {
-            "int" => Some(Token::Type(Type::Int)),
-            "float" => Some(Token::Type(Type::Float)),
-            "void" => Some(Token::Type(Type::Void)),
+            "int" => Some(Token::Type(ValueType::Int)),
+            "float" => Some(Token::Type(ValueType::Float)),
+            "void" => Some(Token::Type(ValueType::Void)),
             "if" => Some(Token::If),
             "else" => Some(Token::Else),
             "while" => Some(Token::While),
@@ -459,7 +459,7 @@ int main() {
 
         let result = vec![
             // int x = 0;
-            Token::Type(Type::Int),
+            Token::Type(ValueType::Int),
             Token::Identifier("x".to_string()),
             Token::Assign,
             Token::UnaryOperator(UnaryOperator::Minus),
@@ -467,19 +467,19 @@ int main() {
             Token::Semicolon,
 
             // int add(int a, int b) {
-            Token::Type(Type::Int),
+            Token::Type(ValueType::Int),
             Token::Identifier("add".to_string()),
             Token::LeftParen,
-            Token::Type(Type::Int),
+            Token::Type(ValueType::Int),
             Token::Identifier("a".to_string()),
             Token::Comma,
-            Token::Type(Type::Int),
+            Token::Type(ValueType::Int),
             Token::Identifier("b".to_string()),
             Token::RightParen,
             Token::LeftBrace,
 
             // int result;
-            Token::Type(Type::Int),
+            Token::Type(ValueType::Int),
             Token::Identifier("result".to_string()),
             Token::Semicolon,
 
@@ -500,19 +500,19 @@ int main() {
             Token::RightBrace,
 
             // float multiply(float x, float y) {
-            Token::Type(Type::Float),
+            Token::Type(ValueType::Float),
             Token::Identifier("multiply".to_string()),
             Token::LeftParen,
-            Token::Type(Type::Float),
+            Token::Type(ValueType::Float),
             Token::Identifier("x".to_string()),
             Token::Comma,
-            Token::Type(Type::Float),
+            Token::Type(ValueType::Float),
             Token::Identifier("y".to_string()),
             Token::RightParen,
             Token::LeftBrace,
 
             // float product = x * y;
-            Token::Type(Type::Float),
+            Token::Type(ValueType::Float),
             Token::Identifier("product".to_string()),
             Token::Assign,
             Token::Identifier("x".to_string()),
@@ -529,16 +529,16 @@ int main() {
             Token::RightBrace,
 
             // void print_numbers(int n) {
-            Token::Type(Type::Void),
+            Token::Type(ValueType::Void),
             Token::Identifier("print_numbers".to_string()),
             Token::LeftParen,
-            Token::Type(Type::Int),
+            Token::Type(ValueType::Int),
             Token::Identifier("n".to_string()),
             Token::RightParen,
             Token::LeftBrace,
 
             // int i = 0;
-            Token::Type(Type::Int),
+            Token::Type(ValueType::Int),
             Token::Identifier("i".to_string()),
             Token::Assign,
             Token::Constant(Constant::Integer(0)),
@@ -572,19 +572,19 @@ int main() {
             Token::RightBrace,
 
             // int main() {
-            Token::Type(Type::Int),
+            Token::Type(ValueType::Int),
             Token::Identifier("main".to_string()),
             Token::LeftParen,
             Token::RightParen,
             Token::LeftBrace,
 
             // int sum;
-            Token::Type(Type::Int),
+            Token::Type(ValueType::Int),
             Token::Identifier("sum".to_string()),
             Token::Semicolon,
 
             // float product;
-            Token::Type(Type::Float),
+            Token::Type(ValueType::Float),
             Token::Identifier("product".to_string()),
             Token::Semicolon,
 

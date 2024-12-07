@@ -2,7 +2,7 @@ use std::any::Any;
 use std::cell::RefCell;
 use std::rc::Rc;
 use crate::interpreter::VariableType::Int;
-use crate::lexical::{Constant, Operator, Token, UnaryOperator};
+use crate::lexical::{Constant, Operator, Token, UnaryOperator, ValueType};
 use crate::parser::{Leaf, Node};
 
 #[derive(Debug, Clone)]
@@ -10,6 +10,18 @@ pub struct Value
 {
     name: String,
     value: VariableType,
+}
+
+impl Value
+{
+    pub fn new(name: &str, value: VariableType) -> Self
+    {
+        Value
+        {
+            name: name.to_string(),
+            value,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -34,23 +46,47 @@ pub enum Variable {
 
 pub struct Interpreter
 {
-    root: Rc<RefCell<Node>>,
+    roots: Vec<Rc<RefCell<Node>>>,
     variables: Vec<Variable>,
 }
 
 impl Interpreter
 {
-    pub fn new(root: Rc<RefCell<Node>>) -> Self
+    pub fn new(roots: &Vec<Rc<RefCell<Node>>>) -> Self
     {
         Interpreter
         {
-            root,
+            roots: roots.clone(),
             variables: Vec::new(),
         }
     }
 
     pub fn run(&mut self)
-    {}
+    {
+        let mut roots = self.roots.clone();
+        for root in roots.iter()
+        {
+            self.interpret_node(root);
+        }
+    }
+
+    pub fn show_variables(&self)
+    {
+        for variable in &self.variables
+        {
+            match variable
+            {
+                Variable::Value(value) =>
+                    {
+                        println!("{} = {:?}", value.name, value.value);
+                    }
+                Variable::Array(array) =>
+                    {
+                        println!("{} = {:?}", array.name, array.values);
+                    }
+            }
+        }
+    }
 
     fn interpret_node(&mut self, node: &Rc<RefCell<Node>>)
     {
@@ -65,12 +101,35 @@ impl Interpreter
                         {
                             let identifier = self.identifier_name(lhs);
 
-                            //
+                            // node の右側から値を取得
+                            if let Some(rhs) = node.borrow().rhs()
+                            {
+                                let value = self.statement(rhs);
+                                self.assign(variable_type, identifier, value);
+                            }
                         }
                     }
                 _ => {
                     panic!("未対応のノードです : {:?}", val);
                 }
+            }
+        }
+    }
+
+    fn assign(&mut self, value_type: &ValueType, identifier: String, value: VariableType)
+    {
+        match value_type
+        {
+            ValueType::Int =>
+                {
+                    self.variables.push(Variable::Value(Value { name: identifier, value }));
+                }
+            ValueType::Float =>
+                {
+                    self.variables.push(Variable::Value(Value { name: identifier, value }));
+                }
+            _ => {
+                panic!("未対応の型です : {:?}", value_type);
             }
         }
     }
@@ -168,9 +227,24 @@ impl Interpreter
         }
     }
 
-    fn identifier(&mut self, identifier: &str) -> VariableType
+    fn identifier(&mut self, identifier: &String) -> VariableType
     {
-        unimplemented!("未実装です");
+        for variable in &self.variables
+        {
+            match variable
+            {
+                Variable::Value(value) =>
+                    {
+                        if value.name == *identifier
+                        {
+                            return value.value.clone();
+                        }
+                    }
+                _ => {}
+            }
+        }
+
+        panic!("未定義の変数です : {}", identifier);
     }
 
     fn constant(&mut self, value: &Constant) -> VariableType
