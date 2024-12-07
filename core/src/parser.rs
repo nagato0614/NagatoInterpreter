@@ -43,11 +43,53 @@ pub struct Declaration {
 }
 
 #[derive(Debug, Clone)]
+pub struct FunctionDefinition {
+    // 型
+    type_specifier: ValueType,
+
+    // 識別子
+    identify: String,
+
+    // 引数のリスト
+    arguments: Vec<ValueType>,
+
+    // 関数の中身
+    body: Vec<Rc<RefCell<Node>>>,
+}
+
+impl FunctionDefinition {
+    pub fn new() -> Self {
+        FunctionDefinition {
+            type_specifier: ValueType::Void,
+            identify: String::new(),
+            arguments: Vec::new(),
+            body: Vec::new(),
+        }
+    }
+
+    pub fn set_type_specifier(&mut self, type_specifier: ValueType) {
+        self.type_specifier = type_specifier;
+    }
+
+    pub fn set_identify(&mut self, identify: String) {
+        self.identify = identify;
+    }
+
+    pub fn add_argument(&mut self, argument: ValueType) {
+        self.arguments.push(argument);
+    }
+
+    pub fn add_body(&mut self, body: Rc<RefCell<Node>>) {
+        self.body.push(body);
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Leaf
 {
     Node(Rc<RefCell<Node>>),
     Declaration(ValueType),
-    FunctionDefinition,
+    FunctionDefinition(FunctionDefinition),
     UnaryExpression(UnaryOperator),
     FunctionCall(FunctionCall),
     ArrayAccess,
@@ -107,8 +149,8 @@ impl Node {
                 Leaf::Declaration(declaration) => {
                     println!("Declaration [{:?}]", declaration);
                 }
-                Leaf::FunctionDefinition => {
-                    println!("FunctionDefinition");
+                Leaf::FunctionDefinition(function_definition) => {
+                    println!("FunctionDefinition [{:?}]", function_definition);
                 }
                 Leaf::UnaryExpression(operator) => {
                     println!("UnaryExpression [{:?}]", operator);
@@ -181,7 +223,7 @@ impl Parser
             token_index: 0,
         }
     }
-    
+
     pub fn roots(&self) -> &Vec<Rc<RefCell<Node>>> {
         &self.roots
     }
@@ -230,6 +272,7 @@ impl Parser
             println!("TranslationUnit token_index: {}", self.token_index);
             // トークンがなくなるまで繰り返す
             self.external_declaration();
+            break;
         }
     }
 
@@ -253,8 +296,41 @@ impl Parser
 
     fn function_definition(&mut self)
     {
-        // 関数定義をパースする
-        unimplemented!();
+        let mut root = Rc::new(RefCell::new(Node::new()));
+        let mut function_definition = FunctionDefinition::new();
+
+        // 関数定義の型を取得
+        if let Some(Token::Type(type_specifier)) = self.get_next_token() {
+            function_definition.set_type_specifier(type_specifier);
+        } else {
+            panic!("型が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+        }
+
+        // 関数定義の識別子を取得
+        if let Some(Token::Identifier(identifier)) = self.get_next_token() {
+            function_definition.set_identify(identifier);
+        } else {
+            panic!("識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+        }
+
+        // 関数定義の引数リストを取得
+        if let Some(Token::LeftParen) = self.get_next_token() {
+            // 引数がない場合は ')' が来る
+            if let Some(Token::RightParen) = self.get_next_token_without_increment() {
+                self.token_index_increment();
+            } else {
+                loop {
+                    // 引数の型を取得
+                    if let Some(Token::Type(type_specifier)) = self.get_next_token() {
+                        function_definition.add_argument(type_specifier);
+                    } else {
+                        panic!("型が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+                    }
+                }
+            }
+        }
+
+        self.roots.push(root);
     }
 
     fn declaration(&mut self)
@@ -571,7 +647,7 @@ impl Parser
                         {
                             Token::LeftParen => {
                                 self.token_index_increment();
-                                
+
                                 // 関数呼び出しの場合
                                 let mut function_call = FunctionCall::new(identify);
 

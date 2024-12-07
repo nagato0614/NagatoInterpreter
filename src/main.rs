@@ -4,7 +4,7 @@ use core::parser::Parser;
 use core::interpreter::Interpreter;
 
 fn main() {
-    let program = String::from("int a=1*3; int b = (1+1)*2; int c = -(a + b);");
+    let program = String::from("int main(void) { return 0; }");
 
     let mut lexer = Lexer::new(program);
     lexer.tokenize();
