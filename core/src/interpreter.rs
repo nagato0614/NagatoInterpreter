@@ -3,6 +3,7 @@ use crate::lexical::{Constant, Operator, UnaryOperator, ValueType};
 use crate::parser::{Leaf, Node};
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::collections::VecDeque;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Value
@@ -56,22 +57,22 @@ pub enum Variable {
 
 pub struct Interpreter
 {
-    roots: Vec<Rc<RefCell<Node>>>,
-    variables: Vec<Variable>,
+    roots: VecDeque<Rc<RefCell<Node>>>,
+    variables: VecDeque<Variable>,
 }
 
 impl Interpreter
 {
-    pub fn new(roots: &Vec<Rc<RefCell<Node>>>) -> Self
+    pub fn new(roots: &VecDeque<Rc<RefCell<Node>>>) -> Self
     {
         Interpreter
         {
             roots: roots.clone(),
-            variables: Vec::new(),
+            variables: VecDeque::new(),
         }
     }
     
-    pub fn variables(&self) -> &Vec<Variable>
+    pub fn variables(&self) -> &VecDeque<Variable>
     {
         &self.variables
     }
@@ -137,11 +138,11 @@ impl Interpreter
         {
             ValueType::Int =>
                 {
-                    self.variables.push(Variable::Value(Value { name: identifier, value }));
+                    self.variables.push_back(Variable::Value(Value { name: identifier, value }));
                 }
             ValueType::Float =>
                 {
-                    self.variables.push(Variable::Value(Value { name: identifier, value }));
+                    self.variables.push_back(Variable::Value(Value { name: identifier, value }));
                 }
             _ => {
                 panic!("未対応の型です : {:?}", value_type);

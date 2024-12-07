@@ -95,7 +95,9 @@ type_specifier ::= void
                    | float
 
 // ブロック内の処理
-compound_statement ::= '{' {declaration}* {statement}* '}'
+compound_statement ::= '{' {block_item}* '}'
+block_item ::= declaration ';'
+              | statement
 statement ::= expression_statement
               | compound_statement
               | selection_statement

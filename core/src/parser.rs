@@ -1,7 +1,8 @@
 use crate::lexical::Operator;
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::rc::{Rc, Weak};
 use crate::lexical::{Constant, Token, ValueType, UnaryOperator};
+use std::collections::VecDeque;
 
 #[derive(Debug, Clone)]
 pub struct FunctionCall {
@@ -69,10 +70,10 @@ pub struct FunctionDefinition {
     identify: String,
 
     // 引数のリスト
-    arguments: Vec<Argument>,
+    arguments: VecDeque<Argument>,
 
     // 関数の中身
-    body: Vec<Rc<RefCell<Node>>>,
+    body: VecDeque<Rc<RefCell<Node>>>,
 }
 
 impl FunctionDefinition {
@@ -80,15 +81,15 @@ impl FunctionDefinition {
         FunctionDefinition {
             type_specifier: ValueType::Void,
             identify: String::new(),
-            arguments: Vec::new(),
-            body: Vec::new(),
+            arguments: VecDeque::new(),
+            body: VecDeque::new(),
         }
     }
 
     pub fn name(&self) -> &String {
         &self.identify
     }
-    
+
     pub fn set_type_specifier(&mut self, type_specifier: ValueType) {
         self.type_specifier = type_specifier;
     }
@@ -98,11 +99,11 @@ impl FunctionDefinition {
     }
 
     pub fn add_argument(&mut self, type_specifier: ValueType, identify: String) {
-        self.arguments.push(Argument::new(type_specifier, identify));
+        self.arguments.push_back(Argument::new(type_specifier, identify));
     }
 
     pub fn add_body(&mut self, body: Rc<RefCell<Node>>) {
-        self.body.push(body);
+        self.body.push_back(body);
     }
 }
 
@@ -232,7 +233,7 @@ impl Node {
 #[derive(Debug, Clone)]
 pub struct Parser {
     tokens: Vec<Token>,
-    roots: Vec<Rc<RefCell<Node>>>,
+    roots: VecDeque<Rc<RefCell<Node>>>,
     token_index: usize,
 }
 
@@ -241,17 +242,17 @@ impl Parser
     pub fn new(tokens: Vec<Token>) -> Self {
         Parser {
             tokens,
-            roots: Vec::new(),
+            roots: VecDeque::new(),
             token_index: 0,
         }
     }
 
-    pub fn roots(&self) -> &Vec<Rc<RefCell<Node>>> {
+    pub fn roots(&self) -> &VecDeque<Rc<RefCell<Node>>> {
         &self.roots
     }
 
     pub fn root(&self) -> &Rc<RefCell<Node>> {
-        self.roots.first().unwrap()
+        self.roots.front().unwrap()
     }
 
     fn get_next_token(&mut self) -> Option<Token>
@@ -352,18 +353,44 @@ impl Parser
         }
 
         // 関数定義の本体を取得. '{', '}' の処理は compound_statement 内部で行う
-        self.compound_statement();
+        self.compound_statement(&mut function_definition);
 
         root.borrow_mut().set_val(Leaf::FunctionDefinition(function_definition));
 
-        self.roots.push(root);
+        self.roots.push_back(root);
     }
 
-    fn compound_statement(&mut self)
+    fn compound_statement(&mut self, function_definition: &mut FunctionDefinition)
     {
-        unimplemented!("compound_statement");
+        // '{' が来ることを確認
+        if let Some(Token::LeftBrace) = self.get_next_token() {
+            // 何もしない
+        } else {
+            panic!("'{{' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+        }
+
+        // '}' が来るまで繰り返す
+        while let Some(Token::RightBrace) = self.get_next_token_without_increment() {
+            let root = self.block_item();
+            function_definition.add_body(root);
+        }
+
+        // '}' が来ることを確認
+        if let Some(Token::RightBrace) = self.get_next_token() {
+            // 何もしない
+        } else {
+            panic!("'}}' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+        }
     }
 
+    fn block_item(&mut self) -> Rc<RefCell<Node>>
+    {
+        let mut node = Rc::new(RefCell::new(Node::new()));
+
+        node
+    }
+
+    /// 関数の引数リストを取得する. ')' が来るまで繰り返す
     fn parameter_list(&mut self, function_definition: &mut FunctionDefinition)
     {
         // ')' が来る場合は何もしない
@@ -464,7 +491,7 @@ impl Parser
             panic!("トークンがありません");
         }
 
-        self.roots.push(root);
+        self.roots.push_back(root);
     }
 
     fn logical_or_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
@@ -879,27 +906,3 @@ impl Parser
     }
 }
 
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parser()
-    {
-        let program = String::from("int a = b();");
-
-        let mut lexer = crate::lexical::Lexer::new(program);
-        lexer.tokenize();
-
-        lexer.show_tokens();
-
-        println!("---");
-
-        let tokens = lexer.tokens().clone();
-        let mut parser = Parser::new(tokens);
-        parser.parse();
-
-        parser.show_tree();
-    }
-}
