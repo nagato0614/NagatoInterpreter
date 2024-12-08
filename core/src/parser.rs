@@ -84,7 +84,7 @@ impl FunctionDefinition {
             body: Vec::new(),
         }
     }
-    
+
     pub fn body(&self) -> &Vec<Rc<RefCell<Node>>> {
         &self.body
     }
@@ -120,7 +120,7 @@ pub enum Leaf
     FunctionCall(FunctionCall),
     ArrayAccess,
     ParenthesizedExpression,
-    
+
     // 代入
     Assignment,
 
@@ -377,10 +377,10 @@ impl Parser
         // 関数定義の本体を取得. '{', '}' の処理は compound_statement 内部で行う
         let roots = self.compound_statement();
         function_definition.body = roots;
-        
+
         let root = Rc::new(RefCell::new(Node::new()));
         root.borrow_mut().set_val(Leaf::FunctionDefinition(function_definition));
-        
+
         self.roots.push(root);
     }
 
@@ -476,23 +476,30 @@ impl Parser
         root
     }
     
+    /// ';' が来ることを確認
+    fn semicolon(&mut self) {
+        if let Some(Token::Semicolon) = self.get_next_token() {
+            // 何もしない
+        } else {
+            panic!("';' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+        }
+    }
+
     fn expression_statement(&mut self) -> Rc<RefCell<Node>>
     {
         let mut root = Rc::new(RefCell::new(Node::new()));
         root.borrow_mut().set_val(Leaf::Assignment);
-        
+
         // 左辺に識別子を設定
         if let Some(Token::Identifier(identifier)) = self.get_next_token()
         {
             let left_node = Rc::new(RefCell::new(Node::new()));
             left_node.borrow_mut().set_val(Leaf::Identifier(identifier));
             root.borrow_mut().set_lhs(left_node);
-        }
-        else
-        {
+        } else {
             panic!("識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
         }
-        
+
         // 次のトークンが '=' かどうか
         if let Some(next_token) = self.get_next_token()
         {
@@ -504,25 +511,23 @@ impl Parser
                         println!("initializer");
                         root.borrow_mut().set_rhs(initializer);
                     }
-                    
-                    // ';' が来ることを確認
-                    if let Some(Token::Semicolon) = self.get_next_token() {
-                        println!("semicolon");
-                        // 何もしない
-                    } else {
-                        panic!("';' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
-                    }
                 }
                 _ => {
                     panic!("初期化子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
                 }
             }
-        }
-        else
-        {
+        } else {
             panic!("トークンがありません");
         }
-        
+
+        // ';' が来ることを確認
+        if let Some(Token::Semicolon) = self.get_next_token() {
+            println!("semicolon");
+            // 何もしない
+        } else {
+            panic!("';' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+        }
+
         root
     }
 
@@ -543,8 +548,7 @@ impl Parser
                     // return の場合は expression が続く
                     if let Some(expression) = self.logical_or_expression(&root) {
                         root.borrow_mut().set_lhs(expression);
-                    }
-                    else { 
+                    } else {
                         panic!("return の後に式がありませんでした : {:?}", self.tokens[self.token_index]);
                     }
                 }
@@ -561,11 +565,7 @@ impl Parser
         }
 
         // ';' が来ることを確認
-        if let Some(Token::Semicolon) = self.get_next_token() {
-            // 何もしない
-        } else {
-            panic!("';' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
-        }
+        self.semicolon();
 
         root
     }
