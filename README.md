@@ -105,10 +105,8 @@ statement ::= expression_statement
               | jump_statement
 
 // 変数の初期化
-expression_statement ::= {expression}? ';'
-expression ::= assignment_expression    
-               | expression ',' assignment_expression   // 関数呼び出しやif文の中で複数の式を書く場合に使用
-assignment_expression ::= logical_or_expression
+expression_statement ::= {assignment_expression}? ';'
+assignment_expression ::= identifier '=' logical_or_expression ';'
 
 // if文
 selection_statement ::= if '(' expression ')' statement

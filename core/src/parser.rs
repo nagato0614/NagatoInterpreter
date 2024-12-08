@@ -120,6 +120,9 @@ pub enum Leaf
     FunctionCall(FunctionCall),
     ArrayAccess,
     ParenthesizedExpression,
+    
+    // 代入
+    Assignment,
 
     // jump系の文
     Return,
@@ -215,6 +218,9 @@ impl Node {
                 }
                 Leaf::Continue => {
                     println!("Continue");
+                }
+                Leaf::Assignment => {
+                    println!("Assignment");
                 }
             }
         }
@@ -456,6 +462,10 @@ impl Parser
                     // jump_statement の場合
                     root = self.jump_statement();
                 }
+                Token::Identifier(identifier) => {
+                    // expression_statement の場合
+                    root = self.expression_statement();
+                }
                 _ => {
                     // expression_statement の場合
                     unimplemented!("expression_statement");
@@ -463,6 +473,56 @@ impl Parser
             }
         }
 
+        root
+    }
+    
+    fn expression_statement(&mut self) -> Rc<RefCell<Node>>
+    {
+        let mut root = Rc::new(RefCell::new(Node::new()));
+        root.borrow_mut().set_val(Leaf::Assignment);
+        
+        // 左辺に識別子を設定
+        if let Some(Token::Identifier(identifier)) = self.get_next_token()
+        {
+            let left_node = Rc::new(RefCell::new(Node::new()));
+            left_node.borrow_mut().set_val(Leaf::Identifier(identifier));
+            root.borrow_mut().set_lhs(left_node);
+        }
+        else
+        {
+            panic!("識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+        }
+        
+        // 次のトークンが '=' かどうか
+        if let Some(next_token) = self.get_next_token()
+        {
+            match next_token
+            {
+                Token::Assign => {
+                    // '=' の場合は initializer をパースする
+                    if let Some(initializer) = self.logical_or_expression(&root) {
+                        println!("initializer");
+                        root.borrow_mut().set_rhs(initializer);
+                    }
+                    
+                    // ';' が来ることを確認
+                    if let Some(Token::Semicolon) = self.get_next_token() {
+                        println!("semicolon");
+                        // 何もしない
+                    } else {
+                        panic!("';' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+                    }
+                }
+                _ => {
+                    panic!("初期化子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+                }
+            }
+        }
+        else
+        {
+            panic!("トークンがありません");
+        }
+        
         root
     }
 

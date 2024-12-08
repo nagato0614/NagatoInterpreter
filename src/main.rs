@@ -5,7 +5,12 @@ use core::interpreter::Interpreter;
 
 fn main() {
     let program = String::from(
-        "int main(void) { return 1 + -1; }\
+        "int main(void) { \
+            int a = 10;\
+            int b = 20;\
+            a = a + b;\
+            return a;\
+        }\
         int add(int a, int b) { return a + b; }");
 
     let mut lexer = Lexer::new(program);
