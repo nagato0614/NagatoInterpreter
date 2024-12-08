@@ -175,7 +175,7 @@ parameter_declaration ::= type_specifier direct_declarator
                           
 jump_statement ::= continue ';'
                    | break ';'
-                   | return {expression}? ';'           
+                   | return {logical_or_expression}? ';'           
 ```
 
 ### 参考 : C言語のBNF

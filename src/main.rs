@@ -4,7 +4,9 @@ use core::parser::Parser;
 use core::interpreter::Interpreter;
 
 fn main() {
-    let program = String::from("int main(void) { return 0; }");
+    let program = String::from(
+        "int main(void) { return 1 + -1; }\
+        int add(int a, int b) { return a + b; }");
 
     let mut lexer = Lexer::new(program);
     lexer.tokenize();
@@ -22,8 +24,11 @@ fn main() {
 
 
     let mut tree_viewer = TreeViewer::new();
-    tree_viewer.make_tree(parser.root());
-    tree_viewer.output_dot();
+    
+    for (i, root) in parser.roots().iter().enumerate() {
+        tree_viewer.make_tree(root);
+    }
+    tree_viewer.output_dot("trees/output.dot");
 
     // println!("----------------------");
     // let mut interpreter = Interpreter::new(parser.roots());

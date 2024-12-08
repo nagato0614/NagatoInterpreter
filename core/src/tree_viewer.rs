@@ -9,6 +9,7 @@ use crate::parser::{Leaf, Node};
 
 pub struct TreeViewer {
     graph: Graph<String, String>,
+    node_index_list: Vec<NodeIndex>,
     node_index: usize,
 }
 
@@ -16,14 +17,12 @@ impl TreeViewer {
     pub fn new() -> Self {
         TreeViewer {
             graph: Graph::<String, String>::new(),
+            node_index_list: Vec::new(),
             node_index: 0,
         }
     }
 
     pub fn make_tree(&mut self, root: &Rc<RefCell<Node>>) {
-        self.node_index = 0;
-        self.graph = Graph::<String, String>::new();
-
         self.add_node(root);
     }
 
@@ -38,6 +37,8 @@ impl TreeViewer {
             }
             Leaf::FunctionDefinition(func) => {
                 node_name = format!("{}: Function Definition [{:?}]", self.node_index, func.name());
+
+
             }
             _ => {
                 node_name = format!("{}: {:?}", self.node_index, leaf);
@@ -45,7 +46,19 @@ impl TreeViewer {
         }
 
         let graph_node = self.graph.add_node(node_name);
+        self.node_index_list.push(graph_node);
         self.node_index += 1;
+        
+        // 関数の場合は body のノードを追加
+        if let Leaf::FunctionDefinition(func) = leaf {
+            let body = func.body();
+            for (i, b) in body.iter().enumerate() {
+                let node_index = self.add_node(b);
+                if let Some(node_index) = node_index {
+                    self.graph.add_edge(graph_node, node_index, String::from(""));
+                }
+            }
+        }
 
         graph_node
     }
@@ -64,7 +77,7 @@ impl TreeViewer {
             if let Some(rhs) = node.borrow().rhs() {
                 let rhs_graph_node = self.add_node(rhs);
                 if let Some(rhs_graph_node) = rhs_graph_node {
-                    self.graph.add_edge(graph_node,rhs_graph_node,  String::from(""));
+                    self.graph.add_edge(graph_node, rhs_graph_node, String::from(""));
                 }
             }
 
@@ -74,11 +87,11 @@ impl TreeViewer {
         None
     }
 
-    pub fn output_dot(&self) {
+    pub fn output_dot(&self, file_name: &str) {
         let dot_output = format!("{:?}", Dot::with_config(&self.graph, &[Config::EdgeNoLabel]));
 
         // ファイルに書き込み
-        let mut file = File::create("output.dot").unwrap();
+        let mut file = File::create(file_name).unwrap();
         file.write_all(dot_output.as_bytes()).unwrap();
     }
 }

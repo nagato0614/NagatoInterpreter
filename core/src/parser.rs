@@ -84,6 +84,10 @@ impl FunctionDefinition {
             body: Vec::new(),
         }
     }
+    
+    pub fn body(&self) -> &Vec<Rc<RefCell<Node>>> {
+        &self.body
+    }
 
     pub fn name(&self) -> &String {
         &self.identify
@@ -116,6 +120,11 @@ pub enum Leaf
     FunctionCall(FunctionCall),
     ArrayAccess,
     ParenthesizedExpression,
+
+    // jump系の文
+    Return,
+    Break,
+    Continue,
 
     // 識別子
     Identifier(String),
@@ -172,7 +181,7 @@ impl Node {
                     println!("Declaration [{:?}]", declaration);
                 }
                 Leaf::FunctionDefinition(function_definition) => {
-                    println!("FunctionDefinition [{:?}]", function_definition);
+                    println!("FunctionDefinition [{:?}]", function_definition.name());
                 }
                 Leaf::UnaryExpression(operator) => {
                     println!("UnaryExpression [{:?}]", operator);
@@ -197,6 +206,15 @@ impl Node {
                 }
                 Leaf::Constant(constant) => {
                     println!("Constant [{:?}]", constant);
+                }
+                Leaf::Return => {
+                    println!("Return");
+                }
+                Leaf::Break => {
+                    println!("Break");
+                }
+                Leaf::Continue => {
+                    println!("Continue");
                 }
             }
         }
@@ -294,7 +312,6 @@ impl Parser
             println!("TranslationUnit token_index: {}", self.token_index);
             // トークンがなくなるまで繰り返す
             self.external_declaration();
-            break;
         }
     }
 
@@ -353,13 +370,18 @@ impl Parser
 
         // 関数定義の本体を取得. '{', '}' の処理は compound_statement 内部で行う
         let roots = self.compound_statement();
-        self.roots = roots;
+        function_definition.body = roots;
+        
+        let root = Rc::new(RefCell::new(Node::new()));
+        root.borrow_mut().set_val(Leaf::FunctionDefinition(function_definition));
+        
+        self.roots.push(root);
     }
 
     fn compound_statement(&mut self) -> Vec<Rc<RefCell<Node>>>
     {
         let mut roots: Vec<Rc<RefCell<Node>>> = Vec::new();
-
+        println!("compound_statement");
         // '{' が来ることを確認
         if let Some(Token::LeftBrace) = self.get_next_token() {
             // 何もしない
@@ -368,7 +390,12 @@ impl Parser
         }
 
         // '}' が来るまで繰り返す
-        while let Some(Token::RightBrace) = self.get_next_token_without_increment() {
+
+        loop {
+            if let Some(Token::RightBrace) = self.get_next_token_without_increment() {
+                break;
+            }
+
             let root = self.block_item();
             roots.push(root);
         }
@@ -395,12 +422,89 @@ impl Parser
                 Token::Type(type_specifier) => {
                     root = self.declaration();
                 }
-
-                // 
                 _ => {
-                    panic!("次のトークンがありません : {:?}", self.tokens[self.token_index]);
+                    root = self.statement();
                 }
             }
+        }
+
+        root
+    }
+
+    fn statement(&mut self) -> Rc<RefCell<Node>>
+    {
+        let mut root = Rc::new(RefCell::new(Node::new()));
+
+        if let Some(next_token) = self.get_next_token_without_increment()
+        {
+            match next_token
+            {
+                Token::LeftBrace => {
+                    // compound_statement の場合
+                    let roots = self.compound_statement();
+                    root = roots.first().unwrap().clone();
+                }
+                Token::If => {
+                    // if_statement の場合
+                    unimplemented!("if_statement");
+                }
+                Token::While => {
+                    // while_statement の場合
+                    unimplemented!("while_statement");
+                }
+                Token::Return => {
+                    // jump_statement の場合
+                    root = self.jump_statement();
+                }
+                _ => {
+                    // expression_statement の場合
+                    unimplemented!("expression_statement");
+                }
+            }
+        }
+
+        root
+    }
+
+    fn jump_statement(&mut self) -> Rc<RefCell<Node>>
+    {
+        let mut root = Rc::new(RefCell::new(Node::new()));
+
+        // 次のトークンを取得
+        if let Some(jump_token) = self.get_next_token()
+        {
+            match jump_token
+            {
+                Token::Return => {
+                    println!("return");
+                    // valにReturnを設定
+                    root.borrow_mut().set_val(Leaf::Return);
+
+                    // return の場合は expression が続く
+                    if let Some(expression) = self.logical_or_expression(&root) {
+                        root.borrow_mut().set_lhs(expression);
+                    }
+                    else { 
+                        panic!("return の後に式がありませんでした : {:?}", self.tokens[self.token_index]);
+                    }
+                }
+                Token::Break => {
+                    unimplemented!("break");
+                }
+                Token::Continue => {
+                    unimplemented!("continue");
+                }
+                _ => {
+                    panic!("ジャンプステートメントが見つかりませんでした : {:?}", self.tokens[self.token_index]);
+                }
+            }
+        }
+
+        // ';' が来ることを確認
+        if let Some(Token::Semicolon) = self.get_next_token() {
+            // 何もしない
+        } else {
+            panic!("';' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
         }
 
         root
