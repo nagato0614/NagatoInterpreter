@@ -6,11 +6,11 @@ pub mod tree_viewer;
 #[cfg(test)]
 mod test
 {
+    use std::collections::HashMap;
     use super::*;
     use lexical::Lexer;
     use interpreter::Variable;
     use interpreter::VariableType;
-    use interpreter::Value;
 
     #[test]
     fn test_static_variable() {
@@ -66,22 +66,20 @@ float v = ((x + z) * (y - 2.0)) + ((u + 3) / 2);
         //   = 11572.0 + 2.5
         //   = 11574.5
 
-        let answer = vec![
-            Value::new("x", VariableType::Int(88)),
-            Value::new("y", VariableType::Float(133.5)),
-            Value::new("z", VariableType::Int(0)),
-            Value::new("u", VariableType::Int(2)),
-            Value::new("v", VariableType::Float(11574.5)),
-        ];
+        let mut answer = HashMap::new();
+        answer.insert("x", Variable::Value(VariableType::Int(88)));
+        answer.insert("y", Variable::Value(VariableType::Float(133.5)));
+        answer.insert("z", Variable::Value(VariableType::Int(0)));
+        answer.insert("u", Variable::Value(VariableType::Int(2)));
+        answer.insert("v", Variable::Value(VariableType::Float(11574.5)));
 
-        for (index, v) in variables.iter().enumerate() {
-            match v {
-                Variable::Value(val) => {
-                    assert_eq!(val.name(), answer[index].name());
-                    assert_eq!(val.value(), answer[index].value());
+        for (name, variable) in variables.iter() {
+            match answer.get(name.as_str()) {
+                Some(ans) => {
+                    assert_eq!(variable, ans);
                 }
-                _ => {
-                    panic!("Unexpected variable type");
+                None => {
+                    panic!("Variable {} is not found", name);
                 }
             }
         }

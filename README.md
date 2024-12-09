@@ -121,7 +121,7 @@ iteration_statement ::= while '(' expression ')' compound_statement
 logical_or_expression ::= logical_and_expression
                           | logical_or_expression '||' logical_and_expression
 // AND 演算子
-logical_and_expression ::= equality_exp[main.rs](src/main.rs)ression
+logical_and_expression ::= equality_expression
                            | logical_and_expression '&&' equality_expression
 equality_expression ::= relational_expression
                         | equality_expression '==' relational_expression

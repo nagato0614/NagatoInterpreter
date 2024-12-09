@@ -1,37 +1,10 @@
 use crate::interpreter::VariableType::Int;
 use crate::lexical::{Constant, Operator, UnaryOperator, ValueType};
-use crate::parser::{Leaf, Node};
+use crate::parser::{FunctionDefinition, Leaf, Node};
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::hash::Hash;
 use std::rc::Rc;
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Value
-{
-    name: String,
-    value: VariableType,
-}
-
-impl Value
-{
-    pub fn new(name: &str, value: VariableType) -> Self
-    {
-        Value
-        {
-            name: name.to_string(),
-            value,
-        }
-    }
-    
-    pub fn name(&self) -> &String
-    {
-        &self.name
-    }
-    
-    pub fn value(&self) -> &VariableType
-    {
-        &self.value
-    }
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Array
@@ -49,7 +22,7 @@ pub enum VariableType
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Variable {
-    Value(Value),
+    Value(VariableType),
     Array(Array),
 }
 
@@ -57,7 +30,8 @@ pub enum Variable {
 pub struct Interpreter
 {
     roots: Vec<Rc<RefCell<Node>>>,
-    variables: Vec<Variable>,
+    variables: HashMap<String, Variable>,
+    function_definition: HashMap<String, FunctionDefinition>,
 }
 
 impl Interpreter
@@ -67,11 +41,12 @@ impl Interpreter
         Interpreter
         {
             roots: roots.clone(),
-            variables: Vec::new(),
+            variables: HashMap::new(),
+            function_definition: HashMap::new(),
         }
     }
-    
-    pub fn variables(&self) -> &Vec<Variable>
+
+    pub fn variables(&self) -> &HashMap<String, Variable>
     {
         &self.variables
     }
@@ -87,17 +62,17 @@ impl Interpreter
 
     pub fn show_variables(&self)
     {
-        for variable in &self.variables
+        for (name, variable) in &self.variables
         {
             match variable
             {
                 Variable::Value(value) =>
                     {
-                        println!("{} = {:?}", value.name, value.value);
+                        println!("{} = {:?}", name, value);
                     }
                 Variable::Array(array) =>
                     {
-                        println!("{} = {:?}", array.name, array.values);
+                        unimplemented!("配列の表示は未実装です");
                     }
             }
         }
@@ -124,6 +99,10 @@ impl Interpreter
                             }
                         }
                     }
+                Leaf::FunctionDefinition(_) =>
+                    {
+                        // 関数定義は無視
+                    }
                 _ => {
                     panic!("未対応のノードです : {:?}", val);
                 }
@@ -137,11 +116,11 @@ impl Interpreter
         {
             ValueType::Int =>
                 {
-                    self.variables.push(Variable::Value(Value { name: identifier, value }));
+                    self.variables.insert(identifier, Variable::Value(value));
                 }
             ValueType::Float =>
                 {
-                    self.variables.push(Variable::Value(Value { name: identifier, value }));
+                    self.variables.insert(identifier, Variable::Value(value));
                 }
             _ => {
                 panic!("未対応の型です : {:?}", value_type);
@@ -244,15 +223,15 @@ impl Interpreter
 
     fn identifier(&mut self, identifier: &String) -> VariableType
     {
-        for variable in &self.variables
+        for (name, variable) in &self.variables
         {
             match variable
             {
                 Variable::Value(value) =>
                     {
-                        if value.name == *identifier
+                        if *name == *identifier
                         {
-                            return value.value.clone();
+                            return value.clone();
                         }
                     }
                 _ => {}

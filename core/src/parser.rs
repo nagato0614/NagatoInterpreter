@@ -475,7 +475,7 @@ impl Parser
 
         root
     }
-    
+
     /// ';' が来ることを確認
     fn semicolon(&mut self) {
         if let Some(Token::Semicolon) = self.get_next_token() {
@@ -621,6 +621,8 @@ impl Parser
 
     fn declaration(&mut self) -> Rc<RefCell<Node>>
     {
+        println!("declaration");
+        
         // グローバル変数定義をパースする
         let mut root = Rc::new(RefCell::new(Node::new()));
 
@@ -675,6 +677,7 @@ impl Parser
 
     fn logical_or_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
+        println!("logical_or_expression");
         let mut node = Rc::new(RefCell::new(Node::new()));
         node.borrow_mut().set_parent(parent);
 
@@ -682,7 +685,6 @@ impl Parser
 
             // 次のトークンが '||' の場合は logical_or_expression をパースする
             if let Some(Token::Operator(Operator::LogicalOr)) = self.get_next_token_without_increment() {
-                println!("logical_or_expression");
                 node.borrow_mut().set_val(Leaf::Operator(Operator::LogicalOr));
                 node.borrow_mut().set_lhs(left_node);
                 self.token_index_increment();
@@ -705,6 +707,7 @@ impl Parser
 
     fn logical_and_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
+        println!("logical_and_expression");
         let mut node = Rc::new(RefCell::new(Node::new()));
         node.borrow_mut().set_parent(parent);
 
@@ -712,7 +715,6 @@ impl Parser
         {
             // 次のトークンが '&&' の場合は logical_and_expression をパースする
             if let Some(Token::Operator(Operator::LogicalAnd)) = self.get_next_token_without_increment() {
-                println!("logical_and_expression");
                 node.borrow_mut().set_val(Leaf::Operator(Operator::LogicalAnd));
                 node.borrow_mut().set_lhs(left_node);
 
@@ -734,6 +736,7 @@ impl Parser
     }
 
     fn equality_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>> {
+        println!("equality_expression");
         let mut node = Rc::new(RefCell::new(Node::new()));
         node.borrow_mut().set_parent(parent);
 
@@ -746,7 +749,6 @@ impl Parser
                     _ => None,
                 })
             {
-                println!("equality_expression");
                 node.borrow_mut().set_val(Leaf::Operator(operator));
                 node.borrow_mut().set_lhs(left_node);
                 self.token_index_increment();
@@ -777,6 +779,7 @@ impl Parser
 
     fn relational_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
+        println!("relational_expression");
         let mut node = Rc::new(RefCell::new(Node::new()));
         node.borrow_mut().set_parent(parent);
 
@@ -816,6 +819,7 @@ impl Parser
 
     fn additive_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
+        println!("additive_expression");
         let mut node = Rc::new(RefCell::new(Node::new()));
         node.borrow_mut().set_parent(parent);
 
@@ -851,6 +855,7 @@ impl Parser
 
     fn multiplicative_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
+        println!("multiplicative_expression");
         let mut node = Rc::new(RefCell::new(Node::new()));
         node.borrow_mut().set_parent(parent);
 
@@ -887,6 +892,7 @@ impl Parser
     // 最終的にはpostfix_expression を呼び出すが関数呼び出しと配列は現状無視する.
     fn unary_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
+        println!("unary_expression");
         let mut node = Rc::new(RefCell::new(Node::new()));
         node.borrow_mut().set_parent(parent);
 
@@ -914,9 +920,9 @@ impl Parser
 
     fn postfix_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
+        println!("postfix_expression");
         let mut node = Rc::new(RefCell::new(Node::new()));
         node.borrow_mut().set_parent(parent);
-
 
         if let Some(next_token) = self.get_next_token_without_increment()
         {
@@ -1001,6 +1007,7 @@ impl Parser
                                 }
                             }
                             _ => {
+                                println!("postfix_expression : {:?}", identify);
                                 // それ以外の場合は identifier として処理する
                                 node.borrow_mut().set_val(Leaf::Identifier(identify));
                             }
@@ -1027,6 +1034,7 @@ impl Parser
 
     fn argument_expression_list(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
+        println!("argument_expression_list");
         let mut node = Rc::new(RefCell::new(Node::new()));
         node.borrow_mut().set_parent(parent);
 
@@ -1035,6 +1043,7 @@ impl Parser
 
     fn primary_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
+        println!("primary_expression");
         let mut node = Rc::new(RefCell::new(Node::new()));
         node.borrow_mut().set_parent(parent);
 
@@ -1054,6 +1063,8 @@ impl Parser
                     let logical_or_expression_node = self.logical_or_expression(&node);
                     if let Some(logical_or_expression_node) = logical_or_expression_node {
                         node.borrow_mut().set_lhs(logical_or_expression_node);
+                    } else {
+                        panic!("空の括弧が見つかりました : {:?}", self.tokens[self.token_index]);
                     }
 
                     // ')' が来ることを確認
