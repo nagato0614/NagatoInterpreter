@@ -717,6 +717,7 @@ impl Parser
             if let Some(Token::Operator(Operator::LogicalAnd)) = self.get_next_token_without_increment() {
                 node.borrow_mut().set_val(Leaf::Operator(Operator::LogicalAnd));
                 node.borrow_mut().set_lhs(left_node);
+                self.token_index_increment();
 
                 // 再度 logical_and_expression を呼び出す
                 if let Some(right_node) = self.logical_and_expression(&mut node) {
@@ -1077,8 +1078,7 @@ impl Parser
                     return Some(node);
                 }
                 _ => {
-                    // 何もしない
-                    // semicolon はここで処理しない
+                    panic!("primary_expression でエラーが発生しました : {:?}", self.tokens[self.token_index]);
                 }
             }
             return Some(node);

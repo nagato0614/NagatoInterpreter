@@ -116,11 +116,25 @@ impl Interpreter
         {
             ValueType::Int =>
                 {
-                    self.variables.insert(identifier, Variable::Value(value));
+                    if let VariableType::Float(val) = value
+                    {
+                        self.variables.insert(identifier, Variable::Value(VariableType::Int(val as i32)));
+                    }
+                    else
+                    {
+                        self.variables.insert(identifier, Variable::Value(value));
+                    }
                 }
             ValueType::Float =>
                 {
-                    self.variables.insert(identifier, Variable::Value(value));
+                    if let VariableType::Int(val) = value
+                    {
+                        self.variables.insert(identifier, Variable::Value(VariableType::Float(val as f64)));
+                    }
+                    else
+                    {
+                        self.variables.insert(identifier, Variable::Value(value));
+                    }
                 }
             _ => {
                 panic!("未対応の型です : {:?}", value_type);
@@ -197,7 +211,7 @@ impl Interpreter
                             }
                         VariableType::Float(val) =>
                             {
-                                Int(-val as i32)
+                                VariableType::Float(-val)
                             }
                     }
                 }
@@ -338,15 +352,15 @@ impl Interpreter
                 }
             (VariableType::Int(lhs), VariableType::Float(rhs)) =>
                 {
-                    Int(lhs + rhs as i32)
+                    VariableType::Float(lhs as f64 + rhs)
                 }
             (VariableType::Float(lhs), VariableType::Int(rhs)) =>
                 {
-                    Int((lhs + rhs as f64) as i32)
+                    VariableType::Float(lhs + rhs as f64)
                 }
             (VariableType::Float(lhs), VariableType::Float(rhs)) =>
                 {
-                    Int((lhs + rhs) as i32)
+                    VariableType::Float(lhs + rhs)
                 }
             _ => {
                 panic!("未対応の型です");
@@ -365,15 +379,15 @@ impl Interpreter
                 }
             (VariableType::Int(lhs), VariableType::Float(rhs)) =>
                 {
-                    Int(lhs - rhs as i32)
+                    VariableType::Float(lhs as f64 - rhs)
                 }
             (VariableType::Float(lhs), VariableType::Int(rhs)) =>
                 {
-                    Int((lhs - rhs as f64) as i32)
+                    VariableType::Float(lhs - rhs as f64)
                 }
             (VariableType::Float(lhs), VariableType::Float(rhs)) =>
                 {
-                    Int((lhs - rhs) as i32)
+                    VariableType::Float(lhs - rhs)
                 }
             _ => {
                 panic!("未対応の型です");
@@ -392,15 +406,15 @@ impl Interpreter
                 }
             (VariableType::Int(lhs), VariableType::Float(rhs)) =>
                 {
-                    Int(lhs * rhs as i32)
+                    VariableType::Float(lhs as f64 * rhs)
                 }
             (VariableType::Float(lhs), VariableType::Int(rhs)) =>
                 {
-                    Int((lhs * rhs as f64) as i32)
+                    VariableType::Float(lhs * rhs as f64)
                 }
             (VariableType::Float(lhs), VariableType::Float(rhs)) =>
                 {
-                    Int((lhs * rhs) as i32)
+                    VariableType::Float(lhs * rhs)
                 }
             _ => {
                 panic!("未対応の型です");
@@ -433,15 +447,15 @@ impl Interpreter
                 }
             (VariableType::Int(lhs), VariableType::Float(rhs)) =>
                 {
-                    Int(lhs / rhs as i32)
+                    VariableType::Float(lhs as f64 / rhs)
                 }
             (VariableType::Float(lhs), VariableType::Int(rhs)) =>
                 {
-                    Int((lhs / rhs as f64) as i32)
+                    VariableType::Float(lhs / rhs as f64)
                 }
             (VariableType::Float(lhs), VariableType::Float(rhs)) =>
                 {
-                    Int((lhs / rhs) as i32)
+                    VariableType::Float(lhs / rhs)
                 }
             _ => {
                 panic!("未対応の型です");

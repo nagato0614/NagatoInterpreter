@@ -62,20 +62,23 @@ float v = ((x + z) * (y - 2.0)) + ((u + 3) / 2);
         // v = ((x+z)*(y-2.0)) + ((u+3)/2)
         //   = ((88+0)*(133.5-2.0)) + ((2+3)/2)
         //   = (88*131.5) + (5/2)
-        //   = 88 * 131.5 + 2.5
-        //   = 11572.0 + 2.5
+        //   = 88 * 131.5 + 2
+        //   = 11572.0 + 2
         //   = 11574.5
 
         let mut answer = HashMap::new();
-        answer.insert("x", Variable::Value(VariableType::Int(88)));
-        answer.insert("y", Variable::Value(VariableType::Float(133.5)));
-        answer.insert("z", Variable::Value(VariableType::Int(0)));
+        answer.insert("v", Variable::Value(VariableType::Float(11574.0)));
         answer.insert("u", Variable::Value(VariableType::Int(2)));
-        answer.insert("v", Variable::Value(VariableType::Float(11574.5)));
+        answer.insert("z", Variable::Value(VariableType::Int(0)));
+        answer.insert("y", Variable::Value(VariableType::Float(133.5)));
+        answer.insert("x", Variable::Value(VariableType::Int(88)));
 
-        for (name, variable) in variables.iter() {
+        
+        
+        for (i, (name, variable)) in variables.iter().enumerate() {
             match answer.get(name.as_str()) {
                 Some(ans) => {
+                    println!("[{}] {}: {:?}", i, name, variable);
                     assert_eq!(variable, ans);
                 }
                 None => {
