@@ -24,6 +24,10 @@ impl FunctionCall
     pub fn add_argument(&mut self, argument: Rc<RefCell<Node>>) {
         self.arguments.push(argument);
     }
+    
+    pub fn arguments(&self) -> &Vec<Rc<RefCell<Node>>> {
+        &self.arguments
+    }
 
     pub fn name(&self) -> &String {
         &self.name

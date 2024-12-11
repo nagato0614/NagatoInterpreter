@@ -34,11 +34,11 @@ impl TreeViewer {
             }
             Leaf::FunctionCall(func) => {
                 node_name = format!("{}: Function Call [{:?}]", self.node_index, func.name());
+                
+
             }
             Leaf::FunctionDefinition(func) => {
                 node_name = format!("{}: Function Definition [{:?}]", self.node_index, func.name());
-
-
             }
             _ => {
                 node_name = format!("{}: {:?}", self.node_index, leaf);
@@ -54,6 +54,17 @@ impl TreeViewer {
             let body = func.body();
             for (i, b) in body.iter().enumerate() {
                 let node_index = self.add_node(b);
+                if let Some(node_index) = node_index {
+                    self.graph.add_edge(graph_node, node_index, String::from(""));
+                }
+            }
+        }
+        
+        // 関数呼び出しの場合は引数のノードを追加
+        if let Leaf::FunctionCall(func) = leaf {
+            let args = func.arguments();
+            for (i, arg) in args.iter().enumerate() {
+                let node_index = self.add_node(arg);
                 if let Some(node_index) = node_index {
                     self.graph.add_edge(graph_node, node_index, String::from(""));
                 }
