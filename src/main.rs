@@ -34,7 +34,7 @@ fn main() {
         tree_viewer.make_tree(root);
     }
     tree_viewer.output_dot("trees/output.dot");
-    
+
     println!("----------------------");
     let mut interpreter = Interpreter::new(parser.roots());
     interpreter.run();

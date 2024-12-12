@@ -18,6 +18,7 @@ pub enum VariableType
 {
     Int(i32),
     Float(f64),
+    Void,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -57,6 +58,14 @@ impl Interpreter
         for root in roots.iter()
         {
             self.interpret_node(root);
+        }
+
+        // main 関数を呼び出し実行する
+        if let Some(main) = self.function_definition.get("main")
+        {
+            println!("main 関数実行 (仮)");
+        } else {
+            panic!("main 関数が見つかりません");
         }
     }
 
@@ -99,9 +108,33 @@ impl Interpreter
                             }
                         }
                     }
-                Leaf::FunctionDefinition(_) =>
+                Leaf::FunctionDefinition(function_definition) =>
                     {
-                        // 関数定義は無視
+                        let name = function_definition.name();
+                        self.function_definition.insert(name.clone(), function_definition.clone());
+                    }
+                
+                // 関数呼び出し
+                Leaf::FunctionCall(function_call) =>
+                    {
+                        let name = function_call.name();
+                        if let Some(function_definition) = self.function_definition.get(name)
+                        {
+                            let fd = function_definition.clone();
+                            self.function_call(&fd);
+                        } else {
+                            panic!("関数が見つかりません : {}", name);
+                        }
+                    }
+                
+                // return 文
+                Leaf::Return =>
+                    {
+                        if let Some(lhs) = node.borrow().lhs()
+                        {
+                            let value = self.statement(lhs);
+                            println!("return {:?}", value);
+                        }
                     }
                 _ => {
                     panic!("未対応のノードです : {:?}", val);
@@ -119,9 +152,7 @@ impl Interpreter
                     if let VariableType::Float(val) = value
                     {
                         self.variables.insert(identifier, Variable::Value(VariableType::Int(val as i32)));
-                    }
-                    else
-                    {
+                    } else {
                         self.variables.insert(identifier, Variable::Value(value));
                     }
                 }
@@ -130,9 +161,7 @@ impl Interpreter
                     if let VariableType::Int(val) = value
                     {
                         self.variables.insert(identifier, Variable::Value(VariableType::Float(val as f64)));
-                    }
-                    else
-                    {
+                    } else {
                         self.variables.insert(identifier, Variable::Value(value));
                     }
                 }
@@ -148,7 +177,7 @@ impl Interpreter
         {
             match val
             {
-                // 代入
+                // 演算子
                 Leaf::Operator(op) =>
                     {
                         if let Some((lhs, rhs))
@@ -187,6 +216,18 @@ impl Interpreter
                             return self.statement(lhs);
                         }
                     }
+                Leaf::FunctionCall(function_call) =>
+                    {
+                        let name = function_call.name();
+
+                        if let Some(function_definition) = self.function_definition.get(name)
+                        {
+                            let fd = function_definition.clone();
+                            return self.function_call(&fd);
+                        } else {
+                            panic!("関数が見つかりません : {}", name);
+                        }
+                    }
                 _ => {
                     panic!("未対応のノードです : {:?}", val);
                 }
@@ -194,6 +235,11 @@ impl Interpreter
         }
 
         panic!("未対応のノードです");
+    }
+
+    fn function_call(&mut self, function_call: &FunctionDefinition) -> VariableType
+    {
+        VariableType::Void
     }
 
     fn unary_expression(&mut self, op: &UnaryOperator, lhs: &Rc<RefCell<Node>>) -> VariableType
@@ -213,6 +259,9 @@ impl Interpreter
                             {
                                 VariableType::Float(-val)
                             }
+                        _ => {
+                            panic!("未対応の型です");
+                        }
                     }
                 }
             UnaryOperator::LogicalNot =>
@@ -227,6 +276,9 @@ impl Interpreter
                             {
                                 Int(if val == 0.0 { 1 } else { 0 })
                             }
+                        _ => {
+                            panic!("未対応の型です");
+                        }
                     }
                 }
             _ => {
