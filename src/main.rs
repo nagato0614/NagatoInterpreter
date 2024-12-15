@@ -6,10 +6,12 @@ use core::interpreter::Interpreter;
 fn main() {
     let program = String::from("
         int add(int a, int b) { return a + b; }
+        int sub(int a, int b) { return a - b; }
         int main(void) {
             int a = 10;
             int b = 20;
             a = add(a * 2, (b + 10) / 2);
+            int c = sub(a, b);
             return a;
         }
         ");
@@ -39,6 +41,6 @@ fn main() {
 
     println!("----------------------");
     let mut interpreter = Interpreter::new(parser.roots());
-    interpreter.run();
+    let val = interpreter.run();
     interpreter.show_variables();
 }

@@ -63,7 +63,7 @@ impl Interpreter
         &self.global_variables
     }
 
-    pub fn run(&mut self)
+    pub fn run(&mut self) -> VariableType
     {
         let mut roots = self.roots.clone();
         for root in roots.iter()
@@ -79,8 +79,10 @@ impl Interpreter
 
             // main 関数を呼び出し
             self.scope = Scope::Local;
-            self.function_call(&function_call);
+            let val = self.function_call(&function_call);
             self.scope = Scope::Global;
+            
+            return val;
         } else {
             panic!("main 関数が見つかりません");
         }
@@ -151,7 +153,9 @@ impl Interpreter
                         }
                     }
                 Leaf::Assignment =>
-                    {}
+                    {
+                        return self.variable_assignment(node);
+                    }
                 _ => {
                     panic!("未対応のノードです : {:?}", val);
                 }
@@ -296,6 +300,8 @@ impl Interpreter
                         {
                             panic!("void は代入できません");
                         }
+                        
+                        return value;
                     }
                 _ => {
                     panic!("未対応のノードです : {:?}", val);
@@ -310,7 +316,7 @@ impl Interpreter
     {
         let name = function_call.name();
         let function_definitions = self.function_definition.clone();
-        
+        println!("function_call : {}", name);
 
         if let Some(function_definition) = function_definitions.get(name)
         {
@@ -354,10 +360,7 @@ impl Interpreter
             // ローカル変数を削除
             self.local_variables.pop();
 
-            if let VariableType::Void = return_value
-            {
-                return return_value;
-            }
+            return return_value;
         } else {
             panic!("関数が見つかりません : {}", name);
         }
@@ -943,5 +946,52 @@ impl Interpreter
             }
         }
         identifier
+    }
+}
+
+#[cfg(test)]
+mod tests
+{
+    use crate::interpreter::VariableType::{Float, Int};
+    use crate::interpreter::{Interpreter, Variable, VariableType};
+    use crate::parser::Parser;
+    use std::collections::HashMap;
+    use crate::lexical::Lexer;
+
+    #[test]
+    fn test_static_variable()
+    {
+        let program = String::from("
+        int add(int a, int b) { return a + b; }
+        int sub(int a, int b) { return a - b; }
+        int main(void) {
+            int a = 10;
+            int b = 20;
+            a = add(a * 2, (b + 10) / 2);
+            int c = sub(a, b);
+            return a;
+        }
+        ");
+
+        let mut lexer = Lexer::new(program);
+        lexer.tokenize();
+
+        lexer.show_tokens();
+
+        println!("----------------------");
+
+        let tokens = lexer.tokens().clone();
+        let mut parser = Parser::new(tokens);
+        parser.parse();
+
+        println!("----------------------");
+        parser.show_tree();
+
+
+        println!("----------------------");
+        let mut interpreter = Interpreter::new(parser.roots());
+        let val = interpreter.run();
+        
+        assert_eq!(val, Int(15));
     }
 }
