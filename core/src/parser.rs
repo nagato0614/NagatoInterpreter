@@ -47,7 +47,7 @@ pub struct Declaration {
 }
 
 #[derive(Debug, Clone)]
-struct Argument {
+pub struct Argument {
     // 型
     type_specifier: ValueType,
 
@@ -61,6 +61,14 @@ impl Argument {
             type_specifier,
             identify,
         }
+    }
+    
+    pub fn type_specifier(&self) -> &ValueType {
+        &self.type_specifier
+    }
+    
+    pub fn identify(&self) -> &String {
+        &self.identify
     }
 }
 
@@ -95,6 +103,10 @@ impl FunctionDefinition {
 
     pub fn name(&self) -> &String {
         &self.identify
+    }
+    
+    pub fn arguments(&self) -> &Vec<Argument> {
+        &self.arguments
     }
 
     pub fn set_type_specifier(&mut self, type_specifier: ValueType) {

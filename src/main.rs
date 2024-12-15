@@ -13,6 +13,8 @@ fn main() {
             return a;
         }
         ");
+
+
     let mut lexer = Lexer::new(program);
     lexer.tokenize();
 

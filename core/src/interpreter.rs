@@ -1,6 +1,6 @@
 use crate::interpreter::VariableType::Int;
 use crate::lexical::{Constant, Operator, UnaryOperator, ValueType};
-use crate::parser::{FunctionDefinition, Leaf, Node};
+use crate::parser::{FunctionCall, FunctionDefinition, Leaf, Node};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -27,12 +27,21 @@ pub enum Variable {
     Array(Array),
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum Scope
+{
+    Global,
+    Local,
+}
+
 
 pub struct Interpreter
 {
     roots: Vec<Rc<RefCell<Node>>>,
-    variables: HashMap<String, Variable>,
+    global_variables: HashMap<String, Variable>,
+    local_variables: Vec<HashMap<String, Variable>>,
     function_definition: HashMap<String, FunctionDefinition>,
+    scope: Scope,
 }
 
 impl Interpreter
@@ -42,14 +51,16 @@ impl Interpreter
         Interpreter
         {
             roots: roots.clone(),
-            variables: HashMap::new(),
+            global_variables: HashMap::new(),
+            local_variables: Vec::new(),
             function_definition: HashMap::new(),
+            scope: Scope::Global,
         }
     }
 
     pub fn variables(&self) -> &HashMap<String, Variable>
     {
-        &self.variables
+        &self.global_variables
     }
 
     pub fn run(&mut self)
@@ -63,7 +74,13 @@ impl Interpreter
         // main 関数を呼び出し実行する
         if let Some(main) = self.function_definition.get("main")
         {
-            println!("main 関数実行 (仮)");
+            // main の function_call を作成
+            let function_call = FunctionCall::new("main".to_string());
+
+            // main 関数を呼び出し
+            self.scope = Scope::Local;
+            self.function_call(&function_call);
+            self.scope = Scope::Global;
         } else {
             panic!("main 関数が見つかりません");
         }
@@ -71,7 +88,7 @@ impl Interpreter
 
     pub fn show_variables(&self)
     {
-        for (name, variable) in &self.variables
+        for (name, variable) in &self.global_variables
         {
             match variable
             {
@@ -87,7 +104,7 @@ impl Interpreter
         }
     }
 
-    fn interpret_node(&mut self, node: &Rc<RefCell<Node>>)
+    fn interpret_node(&mut self, node: &Rc<RefCell<Node>>) -> VariableType
     {
         if let Some(val) = node.borrow().val()
         {
@@ -104,7 +121,7 @@ impl Interpreter
                             if let Some(rhs) = node.borrow().rhs()
                             {
                                 let value = self.statement(rhs);
-                                self.assign(variable_type, identifier, value);
+                                self.variable_definition(variable_type, identifier, value);
                             }
                         }
                     }
@@ -113,20 +130,15 @@ impl Interpreter
                         let name = function_definition.name();
                         self.function_definition.insert(name.clone(), function_definition.clone());
                     }
-                
+
                 // 関数呼び出し
                 Leaf::FunctionCall(function_call) =>
                     {
-                        let name = function_call.name();
-                        if let Some(function_definition) = self.function_definition.get(name)
-                        {
-                            let fd = function_definition.clone();
-                            self.function_call(&fd);
-                        } else {
-                            panic!("関数が見つかりません : {}", name);
-                        }
+                        self.scope = Scope::Local;
+                        self.function_call(function_call);
+                        self.scope = Scope::Global;
                     }
-                
+
                 // return 文
                 Leaf::Return =>
                     {
@@ -134,16 +146,58 @@ impl Interpreter
                         {
                             let value = self.statement(lhs);
                             println!("return {:?}", value);
+
+                            return value;
                         }
                     }
+                Leaf::Assignment =>
+                    {}
                 _ => {
                     panic!("未対応のノードです : {:?}", val);
                 }
             }
         }
+        VariableType::Void
     }
 
-    fn assign(&mut self, value_type: &ValueType, identifier: String, value: VariableType)
+    fn variable_assignment(&mut self, node: &Rc<RefCell<Node>>) -> VariableType
+    {
+
+        // 左辺に識別子があり, 変数として登録されていることを確認する
+        if let Some(lhs) = node.borrow().lhs()
+        {
+            let identifier = self.identifier_name(lhs);
+
+            if let Some(rhs) = node.borrow().rhs()
+            {
+                let value = self.statement(rhs);
+                // ローカル変数から検索
+                if let Some(local_variable) = self.local_variables.last_mut()
+                {
+                    if let Some(variable) = local_variable.get_mut(&identifier)
+                    {
+                        if let Variable::Value(variable) = variable
+                        {
+                            *variable = value;
+                        }
+                    }
+                } else {
+                    // グローバル変数から検索
+                    if let Some(variable) = self.global_variables.get_mut(&identifier)
+                    {
+                        if let Variable::Value(variable) = variable
+                        {
+                            *variable = value;
+                        }
+                    }
+                }
+            }
+        }
+
+        VariableType::Void
+    }
+
+    fn variable_definition(&mut self, value_type: &ValueType, identifier: String, value: VariableType)
     {
         match value_type
         {
@@ -151,23 +205,38 @@ impl Interpreter
                 {
                     if let VariableType::Float(val) = value
                     {
-                        self.variables.insert(identifier, Variable::Value(VariableType::Int(val as i32)));
+                        self.insert_variable(identifier, VariableType::Int(val as i32));
                     } else {
-                        self.variables.insert(identifier, Variable::Value(value));
+                        self.insert_variable(identifier, value);
                     }
                 }
             ValueType::Float =>
                 {
                     if let VariableType::Int(val) = value
                     {
-                        self.variables.insert(identifier, Variable::Value(VariableType::Float(val as f64)));
+                        self.insert_variable(identifier, VariableType::Float(val as f64));
                     } else {
-                        self.variables.insert(identifier, Variable::Value(value));
+                        self.insert_variable(identifier, value);
                     }
                 }
             _ => {
                 panic!("未対応の型です : {:?}", value_type);
             }
+        }
+    }
+
+    fn insert_variable(&mut self, identifier: String, value: VariableType)
+    {
+        match self.scope
+        {
+            Scope::Global =>
+                {
+                    self.global_variables.insert(identifier, Variable::Value(value));
+                }
+            Scope::Local =>
+                {
+                    self.local_variables.last_mut().unwrap().insert(identifier, Variable::Value(value));
+                }
         }
     }
 
@@ -218,14 +287,14 @@ impl Interpreter
                     }
                 Leaf::FunctionCall(function_call) =>
                     {
-                        let name = function_call.name();
+                        self.scope = Scope::Local;
+                        let value = self.function_call(function_call);
+                        self.scope = Scope::Global;
 
-                        if let Some(function_definition) = self.function_definition.get(name)
+                        // statement で void の場合はエラー
+                        if let VariableType::Void = value
                         {
-                            let fd = function_definition.clone();
-                            return self.function_call(&fd);
-                        } else {
-                            panic!("関数が見つかりません : {}", name);
+                            panic!("void は代入できません");
                         }
                     }
                 _ => {
@@ -237,8 +306,63 @@ impl Interpreter
         panic!("未対応のノードです");
     }
 
-    fn function_call(&mut self, function_call: &FunctionDefinition) -> VariableType
+    fn function_call(&mut self, function_call: &FunctionCall) -> VariableType
     {
+        let name = function_call.name();
+        let function_definitions = self.function_definition.clone();
+        
+
+        if let Some(function_definition) = function_definitions.get(name)
+        {
+            // 新しくローカル変数を追加
+            self.local_variables.push(HashMap::new());
+
+            // 引数がある場合計算する
+            let function_arguments = function_call.arguments();
+
+            // 引数がある場合は引数を計算してローカル変数に追加
+            if !function_arguments.is_empty()
+            {
+                // 引数の数と function-definition の引数リストの数が一致することを確認する
+                if function_arguments.len() != function_definition.arguments().len()
+                {
+                    panic!("引数の数が一致しません");
+                }
+
+                for (i, argument) in function_arguments.iter().enumerate()
+                {
+                    let argument_value = self.statement(argument);
+                    let argument_name = function_definition.arguments()[i].identify().clone();
+
+                    // 引数をローカル変数に追加
+                    self.local_variables.last_mut().unwrap().insert(argument_name, Variable::Value(argument_value));
+                }
+            }
+
+            let mut return_value = VariableType::Void;
+
+            // 関数の本体を実行
+            for statement in function_definition.body()
+            {
+                return_value = self.interpret_node(statement);
+                if let VariableType::Void = return_value
+                {
+                    continue;
+                }
+            }
+
+            // ローカル変数を削除
+            self.local_variables.pop();
+
+            if let VariableType::Void = return_value
+            {
+                return return_value;
+            }
+        } else {
+            panic!("関数が見つかりません : {}", name);
+        }
+
+
         VariableType::Void
     }
 
@@ -289,19 +413,18 @@ impl Interpreter
 
     fn identifier(&mut self, identifier: &String) -> VariableType
     {
-        for (name, variable) in &self.variables
+        // ローカル変数から検索.最後のスコープから検索する
+        if let Some(value) = self.local_variables.iter().rev()
+            .find_map(|local_variable| local_variable.get(identifier))
         {
-            match variable
-            {
-                Variable::Value(value) =>
-                    {
-                        if *name == *identifier
-                        {
-                            return value.clone();
-                        }
-                    }
-                _ => {}
+            if let Variable::Value(value) = value {
+                return value.clone();
             }
+        }
+
+        // グローバル変数から検索
+        if let Some(Variable::Value(value)) = self.global_variables.get(identifier) {
+            return value.clone();
         }
 
         panic!("未定義の変数です : {}", identifier);
