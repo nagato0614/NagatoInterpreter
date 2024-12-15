@@ -5,6 +5,7 @@ use core::interpreter::Interpreter;
 
 fn main() {
     let program = String::from("
+        int x = (10 + 20) * 3 - 4 / 2;
         int add(int a, int b) { return a + b; }
         int sub(int a, int b) { return a - b; }
         int main(void) {
@@ -12,7 +13,8 @@ fn main() {
             int b = 20;
             a = add(a * 2, (b + 10) / 2);
             int c = sub(a, b);
-            return a;
+            int d = c + x;
+            return d;
         }
         ");
 

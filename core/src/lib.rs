@@ -32,7 +32,7 @@ float v = ((x + z) * (y - 2.0)) + ((u + 3) / 2);
         let mut interpreter = interpreter::Interpreter::new(parser.roots());
         interpreter.run();
 
-        let variables = interpreter.variables();
+        let variables = interpreter.global_variables();
 
         // 値の計算:
         // x = (10+20)*3 - 4/2

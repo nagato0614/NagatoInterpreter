@@ -58,7 +58,7 @@ impl Interpreter
         }
     }
 
-    pub fn variables(&self) -> &HashMap<String, Variable>
+    pub fn global_variables(&self) -> &HashMap<String, Variable>
     {
         &self.global_variables
     }
@@ -136,9 +136,7 @@ impl Interpreter
                 // 関数呼び出し
                 Leaf::FunctionCall(function_call) =>
                     {
-                        self.scope = Scope::Local;
                         self.function_call(function_call);
-                        self.scope = Scope::Global;
                     }
 
                 // return 文
@@ -291,9 +289,7 @@ impl Interpreter
                     }
                 Leaf::FunctionCall(function_call) =>
                     {
-                        self.scope = Scope::Local;
                         let value = self.function_call(function_call);
-                        self.scope = Scope::Global;
 
                         // statement で void の場合はエラー
                         if let VariableType::Void = value
@@ -962,6 +958,7 @@ mod tests
     fn test_static_variable()
     {
         let program = String::from("
+        int x = (10 + 20) * 3 - 4 / 2;
         int add(int a, int b) { return a + b; }
         int sub(int a, int b) { return a - b; }
         int main(void) {
@@ -969,7 +966,8 @@ mod tests
             int b = 20;
             a = add(a * 2, (b + 10) / 2);
             int c = sub(a, b);
-            return a;
+            int d = c + x;
+            return d;
         }
         ");
 
@@ -992,6 +990,10 @@ mod tests
         let mut interpreter = Interpreter::new(parser.roots());
         let val = interpreter.run();
         
-        assert_eq!(val, Int(15));
+        assert_eq!(val, Int(103));
+        
+        // global 変数の値を確認する
+        let global_variables = interpreter.global_variables();
+        assert_eq!(global_variables.len(), 1);
     }
 }
