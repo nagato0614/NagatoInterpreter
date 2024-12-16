@@ -27,55 +27,39 @@ impl TreeViewer {
     }
 
     fn create_graph_node(&mut self, leaf: &Leaf) -> NodeIndex {
-        let mut node_name: String;
-        match leaf {
-            Leaf::Node(node) => {
-                node_name = format!("{}: {:?}", self.node_index, node.borrow().val().unwrap());
-            }
-            Leaf::FunctionCall(func) => {
-                node_name = format!("{}: Function Call [{:?}]", self.node_index, func.name());
-                
-
-            }
-            Leaf::FunctionDefinition(func) => {
-                node_name = format!("{}: Function Definition [{:?}]", self.node_index, func.name());
-            }
-            _ => {
-                node_name = format!("{}: {:?}", self.node_index, leaf);
-            }
-        }
+        let node_name = match leaf {
+            Leaf::Node(node) => format!("{}: {:?}", self.node_index, node.borrow().val().unwrap()),
+            Leaf::FunctionCall(func) => format!("{}: Function Call [{:?}]", self.node_index, func.name()),
+            Leaf::FunctionDefinition(func) => format!("{}: Function Definition [{:?}]", self.node_index, func.name()),
+            Leaf::IfStatement(_) => format!("{}: If Statement", self.node_index),
+            Leaf::BlockItem(_) => format!("{}: Block Item", self.node_index),
+            _ => format!("{}: {:?}", self.node_index, leaf),
+        };
 
         let graph_node = self.graph.add_node(node_name);
         self.node_index_list.push(graph_node);
         self.node_index += 1;
-        
-        // 関数の場合は body のノードを追加
-        if let Leaf::FunctionDefinition(func) = leaf {
-            let body = func.body();
-            for (i, b) in body.iter().enumerate() {
-                let node_index = self.add_node(b);
-                if let Some(node_index) = node_index {
-                    self.graph.add_edge(graph_node, node_index, String::from(""));
-                }
-            }
-        }
-        
-        // 関数呼び出しの場合は引数のノードを追加
-        if let Leaf::FunctionCall(func) = leaf {
-            let args = func.arguments();
-            for (i, arg) in args.iter().enumerate() {
-                let node_index = self.add_node(arg);
-                if let Some(node_index) = node_index {
-                    self.graph.add_edge(graph_node, node_index, String::from(""));
-                }
-            }
+
+        match leaf {
+            Leaf::FunctionDefinition(func) => self.add_nodes_and_edges(graph_node, func.body()),
+            Leaf::FunctionCall(func) => self.add_nodes_and_edges(graph_node, func.arguments()),
+            Leaf::BlockItem(block) => self.add_nodes_and_edges(graph_node, block),
+            _ => {}
         }
 
         graph_node
     }
 
+    fn add_nodes_and_edges(&mut self, parent_node: NodeIndex, items: &[Rc<RefCell<Node>>]) {
+        for item in items.iter() {
+            if let Some(node_index) = self.add_node(item) {
+                self.graph.add_edge(parent_node, node_index, String::from(""));
+            }
+        }
+    }
     fn add_node(&mut self, node: &Rc<RefCell<Node>>) -> Option<NodeIndex> {
         if let Some(val) = node.borrow().val() {
+            println!("val: {:?}", val);
             let graph_node = self.create_graph_node(val);
 
             if let Some(lhs) = node.borrow().lhs() {

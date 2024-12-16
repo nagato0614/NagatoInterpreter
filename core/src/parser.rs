@@ -24,7 +24,7 @@ impl FunctionCall
     pub fn add_argument(&mut self, argument: Rc<RefCell<Node>>) {
         self.arguments.push(argument);
     }
-    
+
     pub fn arguments(&self) -> &Vec<Rc<RefCell<Node>>> {
         &self.arguments
     }
@@ -62,11 +62,11 @@ impl Argument {
             identify,
         }
     }
-    
+
     pub fn type_specifier(&self) -> &ValueType {
         &self.type_specifier
     }
-    
+
     pub fn identify(&self) -> &String {
         &self.identify
     }
@@ -104,7 +104,7 @@ impl FunctionDefinition {
     pub fn name(&self) -> &String {
         &self.identify
     }
-    
+
     pub fn arguments(&self) -> &Vec<Argument> {
         &self.arguments
     }
@@ -136,6 +136,12 @@ pub enum Leaf
     FunctionCall(FunctionCall),
     ArrayAccess,
     ParenthesizedExpression,
+    
+    // {, }
+    BlockItem(Vec<Rc<RefCell<Node>>>),
+    
+    // 分岐
+    IfStatement(Rc<RefCell<Node>>),
 
     // 代入
     Assignment,
@@ -237,6 +243,12 @@ impl Node {
                 }
                 Leaf::Assignment => {
                     println!("Assignment");
+                }
+                Leaf::IfStatement(_) => {
+                    println!("IfStatement");
+                }
+                Leaf::BlockItem(_) => {
+                    println!("BlockItem");
                 }
             }
         }
@@ -412,7 +424,6 @@ impl Parser
         }
 
         // '}' が来るまで繰り返す
-
         loop {
             if let Some(Token::RightBrace) = self.get_next_token_without_increment() {
                 break;
@@ -464,11 +475,11 @@ impl Parser
                 Token::LeftBrace => {
                     // compound_statement の場合
                     let roots = self.compound_statement();
-                    root = roots.first().unwrap().clone();
+                    root.borrow_mut().set_val(Leaf::BlockItem(roots));
                 }
                 Token::If => {
                     // if_statement の場合
-                    unimplemented!("if_statement");
+                    root = self.selection_statement();
                 }
                 Token::While => {
                     // while_statement の場合
@@ -492,7 +503,59 @@ impl Parser
         root
     }
 
-    /// ';' が来ることを確認
+    fn selection_statement(&mut self) -> Rc<RefCell<Node>>
+    {
+        let mut root = Rc::new(RefCell::new(Node::new()));
+        
+        // 最初の if トークンを取得
+        if let Some(Token::If) = self.get_next_token()
+        {
+            // 何もしない
+        } else {
+            panic!("'if' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+        }
+        
+        // 次のトークンが '(' かどうか
+        if let Some(Token::LeftParen) = self.get_next_token()
+        {
+            // 何もしない
+        } else {
+            panic!("'(' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+        }
+        
+        // 条件式を取得
+        if let Some(condition) = self.logical_or_expression(&root)
+        {
+            root.borrow_mut().set_val(Leaf::IfStatement(condition));
+        } else {
+            panic!("条件式が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+        }
+        
+        // 次のトークンが ')' かどうか
+        if let Some(Token::RightParen) = self.get_next_token()
+        {
+            // 何もしない
+        } else {
+            panic!("')' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+        }
+        
+        // if の中身を取得
+        let true_statement = self.statement();
+        root.borrow_mut().set_lhs(true_statement);
+        
+        // else がある場合
+        if let Some(Token::Else) = self.get_next_token_without_increment()
+        {
+            self.token_index_increment();
+            
+            // else の中身を取得
+            let false_statement = self.statement();
+            root.borrow_mut().set_rhs(false_statement);
+        }
+
+        root
+    }
+    
     fn semicolon(&mut self) {
         if let Some(Token::Semicolon) = self.get_next_token() {
             // 何もしない
@@ -638,7 +701,7 @@ impl Parser
     fn declaration(&mut self) -> Rc<RefCell<Node>>
     {
         println!("declaration");
-        
+
         // グローバル変数定義をパースする
         let mut root = Rc::new(RefCell::new(Node::new()));
 

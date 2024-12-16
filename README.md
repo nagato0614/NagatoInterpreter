@@ -109,11 +109,11 @@ expression_statement ::= {assignment_expression}? ';'
 assignment_expression ::= identifier '=' logical_or_expression ';'
 
 // if文
-selection_statement ::= if '(' expression ')' statement
-                        | if '(' expression ')' statement else statement
+selection_statement ::= if '(' logical_or_expression ')' statement
+                        | if '(' logical_or_expression ')' statement else statement
                         
 // while文
-iteration_statement ::= while '(' expression ')' compound_statement
+iteration_statement ::= while '(' logical_or_expression ')' compound_statement
 
                           
 // 演算子周りの優先順位
