@@ -5,18 +5,21 @@ use core::interpreter::Interpreter;
 
 fn main() {
     let program = String::from("
+        int fib = 0;
+        int fibonacci(int n) {
+            if (n == 0) {
+                return 0;
+            }
+            else if (n == 1) {
+                return 1;
+            } else {
+                return fibonacci(n - 1) + fibonacci(n - 2);
+            }
+        }
+
         int main(void) {
-            int a = 10;
-            if (a > 5) {
-                a = a + 1;
-                a = a * 2;
-            }
-            else
-            {
-                a = a - 1;
-                a = a / 2;
-            }
-            return a;
+            fib = fibonacci(1);
+            return fib;
         }
         ");
 
@@ -43,8 +46,17 @@ fn main() {
     }
     tree_viewer.output_dot("trees/output.dot");
 
-    // println!("----------------------");
-    // let mut interpreter = Interpreter::new(parser.roots());
-    // let val = interpreter.run();
-    // interpreter.show_variables();
+    println!("----------------------");
+    let mut interpreter = Interpreter::new(parser.roots());
+    // 時間計測スタート
+    let start = std::time::Instant::now();
+    let val = interpreter.run();
+    // 時間計測終了
+    let end = std::time::Instant::now();
+    interpreter.show_variables();
+    println!("----------------------");
+
+    println!("calculation time: {:?}", end.duration_since(start));
+    println!("result: {:?}", val);
+    let answer = 75025;
 }

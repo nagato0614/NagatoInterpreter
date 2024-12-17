@@ -161,6 +161,33 @@ pub enum Leaf
     Constant(Constant),
 }
 
+// Leaf の format 出力
+impl std::fmt::Display for Leaf
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result
+    {
+        match self
+        {
+            Leaf::Node(node) => write!(f, "Node [{:?}]", node.borrow().val()),
+            Leaf::Declaration(declaration) => write!(f, "Declaration [{:?}]", declaration),
+            Leaf::FunctionDefinition(function_definition) => write!(f, "FunctionDefinition [{:?}]", function_definition.name()),
+            Leaf::UnaryExpression(operator) => write!(f, "UnaryExpression [{:?}]", operator),
+            Leaf::FunctionCall(function_call) => write!(f, "FunctionCall [{:?}]", function_call),
+            Leaf::ArrayAccess => write!(f, "ArrayAccess"),
+            Leaf::ParenthesizedExpression => write!(f, "ParenthesizedExpression"),
+            Leaf::BlockItem(_) => write!(f, "BlockItem"),
+            Leaf::IfStatement(_) => write!(f, "IfStatement"),
+            Leaf::Assignment => write!(f, "Assignment"),
+            Leaf::Return => write!(f, "Return"),
+            Leaf::Break => write!(f, "Break"),
+            Leaf::Continue => write!(f, "Continue"),
+            Leaf::Identifier(identifier) => write!(f, "Identifier [{:?}]", identifier),
+            Leaf::Operator(operator) => write!(f, "Operator [{:?}]", operator),
+            Leaf::Constant(constant) => write!(f, "Constant [{:?}]", constant),
+        }
+    }
+}
+
 /// 構文木
 #[derive(Debug, Clone)]
 pub struct Node {
