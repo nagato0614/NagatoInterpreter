@@ -5,23 +5,16 @@ use core::interpreter::Interpreter;
 
 fn main() {
     let program = String::from("
-        int fib = 0;
-        int fibonacci(int n) {
-            if (n == 0) {
-                return 0;
-            }
-            else if (n == 1) {
-                return 1;
-            } else {
-                return fibonacci(n - 1) + fibonacci(n - 2);
-            }
-        }
-
-        int main(void) {
-            fib = fibonacci(1);
-            return fib;
-        }
-        ");
+int main(void) {
+    int count = 10;
+    int sum = 0;
+    while (count > 0) {
+        sum = sum + count;
+        count = count - 1;
+    }
+    return sum;
+}
+    ");
 
 
     let mut lexer = Lexer::new(program);
