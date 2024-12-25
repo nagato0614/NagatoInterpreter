@@ -59,7 +59,7 @@ pub struct Interpreter
     local_variables: Vec<Vec<HashMap<String, Variable>>>,
 
     function_definition: HashMap<String, FunctionDefinition>,
-    
+
     scope: Scope,
 }
 
@@ -178,12 +178,59 @@ impl Interpreter
                     {
                         return self.selection_statement(node);
                     }
+                Leaf::WhileStatement =>
+                    {
+                        return self.iteration_statement(node);
+                    }
                 _ => {
                     panic!("未対応のノードです : {:?}", val);
                 }
             }
         }
         VariableType::Void
+    }
+
+
+    fn iteration_statement(&mut self, node: &Rc<RefCell<Node>>) -> VariableType
+    {
+        // while 文の条件式を取得
+        if let Some(condition_root) = node.borrow().lhs()
+        {
+            let mut condition = true;
+            condition = self.condition(condition_root);
+            
+            // condition != 0 の場合は while 文の中身を実行
+            while condition {
+                if let Some(rhs) = node.borrow().rhs()
+                {
+                    if let Some(Leaf::BlockItem(nodes)) = rhs.borrow().val()
+                    {
+                        self.compound_statement(nodes, true);
+                    }
+                }
+                condition = self.condition(condition_root);
+            }
+        }
+
+        VariableType::Void
+    }
+
+    fn condition(&mut self, node: &Rc<RefCell<Node>>) -> bool
+    {
+        let condition = self.statement(node);
+
+        match condition
+        {
+            VariableType::Int(val) => {
+                val != 0
+            }
+            VariableType::Float(val) => {
+                val != 0.0
+            }
+            _ => {
+                panic!("while 文の条件式が対応していません");
+            }
+        }
     }
 
     fn selection_statement(&mut self, node: &Rc<RefCell<Node>>) -> VariableType
@@ -268,21 +315,17 @@ impl Interpreter
                         if let Variable::Value(variable) = variable
                         {
                             *variable = value;
-                        }
-                        else {
+                        } else {
                             panic!("Global 変数が見つかりません : {}", identifier);
                         }
-                    }
-                    else {
+                    } else {
                         panic!("Global 変数が見つかりません : {}", identifier);
                     }
                 }
-            }
-            else { 
+            } else {
                 panic!("右辺に識別子がありません");
             }
-        }
-        else { 
+        } else {
             panic!("左辺に識別子がありません");
         }
 
@@ -409,8 +452,6 @@ impl Interpreter
 
         if let Some(function_definition) = function_definitions.get(name)
         {
-
-            
             let mut new_variables: HashMap<String, Variable> = HashMap::new();
 
             // 引数がある場合計算する
@@ -444,7 +485,7 @@ impl Interpreter
             self.local_variables.last_mut().unwrap().push(new_variables);
 
             let return_value = self.compound_statement(function_definition.body(),
-                                                           false);
+                                                       false);
 
             // ローカル変数を削除
             self.local_variables.pop();
@@ -1125,11 +1166,11 @@ mod tests
         // global 変数の値を確認する
         let global_variables = interpreter.global_variables();
         assert_eq!(global_variables.len(), 2);
-        
+
         let mut variables = HashMap::new();
         variables.insert("x".to_string(), Variable::Value(Int(88)));
         variables.insert("fib".to_string(), Variable::Value(Int(55)));
-        
+
         for (name, variable) in global_variables
         {
             println!("{} = {:?}", name, variable);
@@ -1144,6 +1185,5 @@ mod tests
                 }
             }
         }
-
     }
 }
