@@ -19,6 +19,7 @@ pub enum VariableType
     Int(i32),
     Float(f64),
     Void,
+    Break,
 }
 
 // VariableType の format
@@ -31,6 +32,7 @@ impl std::fmt::Display for VariableType
             VariableType::Int(val) => write!(f, "{}", val),
             VariableType::Float(val) => write!(f, "{}", val),
             VariableType::Void => write!(f, "void"),
+            VariableType::Break => write!(f, "break"),
         }
     }
 }
@@ -182,6 +184,10 @@ impl Interpreter
                     {
                         return self.iteration_statement(node);
                     }
+                Leaf::Break =>
+                    {
+                        return VariableType::Break;
+                    }
                 _ => {
                     panic!("未対応のノードです : {:?}", val);
                 }
@@ -205,7 +211,11 @@ impl Interpreter
                 {
                     if let Some(Leaf::BlockItem(nodes)) = rhs.borrow().val()
                     {
-                        self.compound_statement(nodes, true);
+                        let result = self.compound_statement(nodes, true);
+                        if let VariableType::Break = result
+                        {
+                            break;
+                        }
                     }
                 }
                 condition = self.condition(condition_root);
@@ -490,6 +500,12 @@ impl Interpreter
             // ローカル変数を削除
             self.local_variables.pop();
 
+            // return が Break の場合は エラー
+            if let VariableType::Break = return_value
+            {
+                panic!("関数内で break は使用できません");
+            }
+            
             return_value
         } else {
             panic!("関数が見つかりません : {}", name);
@@ -1128,6 +1144,7 @@ mod tests
         let program = String::from("
         int x = (10 + 20) * 3 - 4 / 2;
         int fib = 0;
+        int sum = 0;
         int add(int a, int b) { return a + b; }
         int sub(int a, int b) { return a - b; }
         int fibo(int n) {
@@ -1147,6 +1164,13 @@ mod tests
             int c = sub(a, b);
             int d = c + x;
             fib = fibo(10);
+
+            int count  = 0;
+            while (count < 10) {
+                sum = sum + count;
+                count = count + 1;
+            }
+
             return d;
         }
         ");
@@ -1165,12 +1189,13 @@ mod tests
 
         // global 変数の値を確認する
         let global_variables = interpreter.global_variables();
-        assert_eq!(global_variables.len(), 2);
+        assert_eq!(global_variables.len(), 3);
 
         let mut variables = HashMap::new();
         variables.insert("x".to_string(), Variable::Value(Int(88)));
         variables.insert("fib".to_string(), Variable::Value(Int(55)));
-
+        variables.insert("sum".to_string(), Variable::Value(Int(45)));
+        
         for (name, variable) in global_variables
         {
             println!("{} = {:?}", name, variable);

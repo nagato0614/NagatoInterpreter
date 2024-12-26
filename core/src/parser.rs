@@ -527,6 +527,10 @@ impl Parser
                     // expression_statement の場合
                     root = self.expression_statement();
                 }
+                Token::Break => {
+                    // jump_statement の場合
+                    root = self.jump_statement();
+                }
                 _ => {
                     // expression_statement の場合
                     unimplemented!("expression_statement");
@@ -710,7 +714,8 @@ impl Parser
                     }
                 }
                 Token::Break => {
-                    unimplemented!("break");
+                    println!("break");
+                    root.borrow_mut().set_val(Leaf::Break);
                 }
                 Token::Continue => {
                     unimplemented!("continue");
