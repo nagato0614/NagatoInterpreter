@@ -11,6 +11,7 @@ int main(void) {
 
     /* ブロックコメント */
 
+    /// これもコメント
     while (count > 0) {
         sum = sum + count;
         count = count - 1;

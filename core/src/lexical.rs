@@ -282,7 +282,7 @@ impl Lexer
                         self.add_token();
                         // 次のトークンを取得して コメントアウトの場合はコメントアウトをスキップ
                         let next_char = self.peek_char();
-                        
+
                         match next_char {
                             Some('/') =>
                                 {
@@ -456,7 +456,9 @@ mod tests {
     fn test_lexer() {
         let sentence = "
 int x = -0;
-
+/**
+ * Add two integers
+ */
 int add(int a, int b) {
     int result;
     result = a + b;
@@ -487,6 +489,7 @@ int main() {
     } else {
         sum = sum + 1;
     }
+    /// これもコメント
 
     print_numbers(5);
 
@@ -496,7 +499,7 @@ int main() {
         return 2;
     } else {
         return 0;
-    }
+    } 
 }
 ".to_string();
 
