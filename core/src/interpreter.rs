@@ -20,6 +20,7 @@ pub enum VariableType
     Float(f64),
     Void,
     Break,
+    Return(Box<VariableType>),
 }
 
 // VariableType の format
@@ -33,6 +34,7 @@ impl std::fmt::Display for VariableType
             VariableType::Float(val) => write!(f, "{}", val),
             VariableType::Void => write!(f, "void"),
             VariableType::Break => write!(f, "break"),
+            VariableType::Return(val) => write!(f, "return {}", val),
         }
     }
 }
@@ -103,6 +105,10 @@ impl Interpreter
             let val = self.function_call(&function_call);
             self.scope = Scope::Global;
 
+            if let VariableType::Return(val) = val
+            {
+                return *val;
+            }
             return val;
         } else {
             panic!("main 関数が見つかりません");
@@ -167,9 +173,8 @@ impl Interpreter
                         if let Some(lhs) = node.borrow().lhs()
                         {
                             let value = self.statement(lhs);
-                            //println!("return {:?}", value);
-
-                            return value;
+                            println!("return value : {:?}", value);
+                            return VariableType::Return(Box::new(value));
                         }
                     }
                 Leaf::Assignment =>
@@ -204,7 +209,7 @@ impl Interpreter
         {
             let mut condition = true;
             condition = self.condition(condition_root);
-            
+
             // condition != 0 の場合は while 文の中身を実行
             while condition {
                 if let Some(rhs) = node.borrow().rhs()
@@ -212,9 +217,15 @@ impl Interpreter
                     if let Some(Leaf::BlockItem(nodes)) = rhs.borrow().val()
                     {
                         let result = self.compound_statement(nodes, true);
-                        if let VariableType::Break = result
+                        match result
                         {
-                            break;
+                            VariableType::Break => {
+                                break;
+                            }
+                            VariableType::Return(return_val) => {
+                                return VariableType::Return(return_val);
+                            }
+                            _ => {}
                         }
                     }
                 }
@@ -470,7 +481,6 @@ impl Interpreter
             // 引数がある場合は引数を計算してローカル変数に追加
             if !function_arguments.is_empty()
             {
-                //println!("function_call 引数の数 : {}", function_arguments.len());
                 // 引数の数と function-definition の引数リストの数が一致することを確認する
                 if function_arguments.len() != function_definition.arguments().len()
                 {
@@ -481,7 +491,6 @@ impl Interpreter
                 {
                     let argument_value = self.statement(argument);
                     let argument_name = function_definition.arguments()[i].identify().clone();
-                    //println!("argument_name : {}", argument_name);
                     // 引数をローカル変数に追加
                     if let Some(local_variables) = self.local_variables.last_mut()
                     {
@@ -505,7 +514,12 @@ impl Interpreter
             {
                 panic!("関数内で break は使用できません");
             }
-            
+
+            if let VariableType::Return(val) = return_value
+            {
+                return VariableType::Return(val);
+            }
+
             return_value
         } else {
             panic!("関数が見つかりません : {}", name);
@@ -527,6 +541,13 @@ impl Interpreter
         for statement in nodes.iter()
         {
             return_value = self.interpret_node(statement);
+            match return_value
+            {
+                VariableType::Return(_) => {
+                    break;
+                }
+                _ => {}
+            }
         }
 
         if is_generate_local_variables
@@ -1195,7 +1216,7 @@ mod tests
         variables.insert("x".to_string(), Variable::Value(Int(88)));
         variables.insert("fib".to_string(), Variable::Value(Int(55)));
         variables.insert("sum".to_string(), Variable::Value(Int(45)));
-        
+
         for (name, variable) in global_variables
         {
             println!("{} = {:?}", name, variable);
