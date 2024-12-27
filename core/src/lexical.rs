@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 /// BNFに基づく演算子の定義
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Operator {
@@ -136,32 +138,93 @@ impl Token
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Macro
+{
+    name: String,
+    value: String,
+    start_line: usize,
+    end_line: usize,
+}
 
+
+#[derive(Debug, Clone)]
 pub struct Lexer {
     sentence: String,
     position: usize,
     tokens: Vec<Token>,
     token_str: String,
+    line_num: usize, // プログラムの行数
+    macros: Vec<Macro>,
 }
 
 impl Lexer
 {
     pub fn new(sentence: String) -> Lexer {
+
+        // 文字列の行数を取得
+        let line_num = sentence.lines().count();
+
         Lexer {
             sentence,
             position: 0,
             tokens: Vec::new(),
             token_str: String::new(),
+            line_num,
+            macros: Vec::new(),
         }
     }
-    
+
     fn reset_position(&mut self)
     {
         self.position = 0;
+        self.token_str.clear();
+        self.tokens.clear();
     }
-    
+
     fn remove_comments(&mut self)
     {
+        let mut new_sentence = String::new();
+        let chars: Vec<char> = self.sentence.chars().collect();
+        let mut i = 0;
+
+        while i < chars.len() {
+            // 1. "//" コメントの検知
+            if i + 1 < chars.len() && chars[i] == '/' && chars[i + 1] == '/' {
+                // "//" が始まったら、改行か入力末まで読み飛ばす
+                i += 2;
+                while i < chars.len() && chars[i] != '\n' {
+                    i += 1;
+                }
+            }
+            // 2. "/* ... */" コメントの検知
+            else if i + 1 < chars.len() && chars[i] == '/' && chars[i + 1] == '*' {
+                // "/*" が始まったら、"*/" が出るか入力末まで読み飛ばす
+                i += 2;
+                while i + 1 < chars.len() && !(chars[i] == '*' && chars[i + 1] == '/') {
+                    i += 1;
+                }
+                // "*/" の分も読み飛ばす (まだ入力が続いていれば)
+                if i + 1 < chars.len() {
+                    i += 2;
+                }
+            }
+            // 3. 通常の文字として読み込む
+            else {
+                new_sentence.push(chars[i]);
+                i += 1;
+            }
+        }
+
+        self.sentence = new_sentence;
+    }
+
+    /// マクロ定義
+    /// #define マクロ名 マクロの定義
+    fn macro_define(&mut self, line_count: usize)
+    {
+        // '#' は既に読み込まれているので、define を読み込む
+        let mut define = String::new();
         loop
         {
             let c = match self.next_char()
@@ -169,66 +232,163 @@ impl Lexer
                 Some(c) => c,
                 None => break,
             };
-            
-            if c == '/'
+
+            if c == ' '
             {
-                let next_char = self.peek_char();
-                match next_char
+                break;
+            }
+
+            define.push(c);
+        }
+
+        if define != "define"
+        {
+            panic!("Unknown macro: {:?}", define);
+        }
+
+        // マクロ名を取得する
+        let mut macro_name = String::new();
+        loop
+        {
+            let c = match self.next_char()
+            {
+                Some(c) => c,
+                None => break,
+            };
+
+            if c == ' '
+            {
+                break;
+            }
+
+            macro_name.push(c);
+        }
+
+        // マクロの定義を取得する
+        let mut macro_value = String::new();
+        loop
+        {
+            let c = match self.next_char()
+            {
+                Some(c) => c,
+                None => break,
+            };
+
+            if c == '\n'
+            {
+                break;
+            }
+
+            macro_value.push(c);
+        }
+
+        self.macros.push(Macro {
+            name: macro_name,
+            value: macro_value,
+            start_line: line_count,
+            end_line: self.line_num,
+        });
+    }
+
+    // 定義したマクロを元に置換
+    fn macro_replace(&mut self)
+    {
+        let mut new_sentence = String::new();
+        
+        // マクロの定義後から undef までの行を取得し置換する
+        let lines = self.sentence.lines().collect::<Vec<&str>>();
+        for (i, line) in lines.iter().enumerate()
+        {
+            let mut is_replaced = false;
+            for m in &self.macros
+            {
+                if line.contains(&m.name)
                 {
-                    Some('/') =>
-                        {
-                            // 1行コメント
-                            loop
-                            {
-                                let c = match self.next_char()
-                                {
-                                    Some(c) => c,
-                                    None => break,
-                                };
-                                
-                                if c == '\n'
-                                {
-                                    break;
-                                }
-                            }
-                        }
-                    Some('*') =>
-                        {
-                            // ブロックコメント
-                            loop
-                            {
-                                let c = match self.next_char()
-                                {
-                                    Some(c) => c,
-                                    None => break,
-                                };
-                                
-                                if c == '*'
-                                {
-                                    let next_char = self.peek_char();
-                                    match next_char
-                                    {
-                                        Some('/') =>
-                                            {
-                                                self.next_char();
-                                                break;
-                                            }
-                                        _ => {}
-                                    }
-                                }
-                            }
-                        }
-                    _ => {}
+                    let replaced_line = line.replace(&m.name, &m.value);
+                    new_sentence.push_str(&replaced_line);
+                    new_sentence.push('\n');
+                    is_replaced = true;
+                    break;
                 }
             }
+
+            if !is_replaced
+            {
+                new_sentence.push_str(line);
+                new_sentence.push('\n');
+            }
         }
+        
+        self.sentence = new_sentence;
+    }
+
+    // マクロを見つけて置換する
+    fn preprocess(&mut self)
+    {
+        // マクロは行の先頭に書かれていない場合はエラーとする
+        let mut is_first = true;
+        let mut line_count = 0;
+
+        loop
+        {
+            let c = match self.next_char()
+            {
+                Some(c) => c,
+                None => break,
+            };
+
+            match c
+            {
+                '\n' => {
+                    // 行末まで読み込んだら値をクリアする.
+                    self.token_str.clear();
+                    is_first = true;
+                    line_count += 1;
+                }
+                '#' => {
+                    // マクロの定義
+                    if self.token_str.len() == 0
+                    {
+                        // 行の先頭の場合はマクロ定義
+                        self.macro_define(line_count);
+                    }
+
+                    is_first = false;
+                }
+                'a'..='z' | 'A'..='Z' | '_' =>
+                    {
+                        is_first = false;
+                    }
+                '0'..='9' =>
+                    {
+                        is_first = false;
+                    }
+                _ => {}
+            }
+        }
+
+        // マクロを置換
+        self.macro_replace();
+
+        // # で始まる行をすべて削除
+        self.sentence = self.sentence.lines().filter(|line| !line.starts_with("#")).collect::<Vec<&str>>().join("\n");
+        
+        println!("{}", self.sentence);
     }
 
     pub fn tokenize(&mut self)
     {
         // コメントを削除
+        self.reset_position();
         self.remove_comments();
-        
+
+        // マクロを置換
+        self.reset_position();
+        self.preprocess();
+
+        // 処理をはじめから行うために位置をリセット
+        self.reset_position();
+
         loop {
             let c = match self.next_char() {
                 Some(c) => c,

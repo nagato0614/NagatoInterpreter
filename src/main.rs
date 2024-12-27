@@ -5,15 +5,17 @@ use core::interpreter::Interpreter;
 
 fn main() {
     let program = String::from("
+#define N 10
+#define S sum
 int main(void) {
-    int count = 10; // こめんと
-    int sum = 0;
+    int count = N; // こめんと
+    int S = 0;
 
     /* ブロックコメント */
 
     /// これもコメント
     while (count > 0) {
-        sum = sum + count;
+        S = S + count;
         count = count - 1;
     }
     return sum;
