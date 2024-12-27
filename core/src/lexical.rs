@@ -657,6 +657,8 @@ mod tests {
     #[test]
     fn test_lexer() {
         let sentence = "
+
+#define N 10
 int x = -0;
 /**
  * Add two integers
@@ -686,7 +688,7 @@ int main() {
     sum = add(5, 10);
     product = multiply(2.5, 4.0);
 
-    if (sum > 10) {
+    if (sum > N) {
         sum = sum - 1;
     } else {
         sum = sum + 1;
@@ -695,9 +697,9 @@ int main() {
 
     print_numbers(5);
 
-    if (sum > -10) {
+    if (sum > -N) {
         return 1;
-    } else if (sum <= -10) {
+    } else if (sum <= -N) {
         return 2;
     } else {
         return 0;
