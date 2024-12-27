@@ -6,13 +6,16 @@ use core::interpreter::Interpreter;
 fn main() {
     let program = String::from("
 int main(void) {
-    int count = 10;
+    int count = 10; // こめんと
     int sum = 0;
+
+    /* ブロックコメント */
+
     while (count > 0) {
         sum = sum + count;
         count = count - 1;
     }
-    return sum;
+    return sum; 
 }
     ");
 
