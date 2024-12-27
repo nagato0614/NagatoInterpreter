@@ -154,9 +154,81 @@ impl Lexer
             token_str: String::new(),
         }
     }
+    
+    fn reset_position(&mut self)
+    {
+        self.position = 0;
+    }
+    
+    fn remove_comments(&mut self)
+    {
+        loop
+        {
+            let c = match self.next_char()
+            {
+                Some(c) => c,
+                None => break,
+            };
+            
+            if c == '/'
+            {
+                let next_char = self.peek_char();
+                match next_char
+                {
+                    Some('/') =>
+                        {
+                            // 1行コメント
+                            loop
+                            {
+                                let c = match self.next_char()
+                                {
+                                    Some(c) => c,
+                                    None => break,
+                                };
+                                
+                                if c == '\n'
+                                {
+                                    break;
+                                }
+                            }
+                        }
+                    Some('*') =>
+                        {
+                            // ブロックコメント
+                            loop
+                            {
+                                let c = match self.next_char()
+                                {
+                                    Some(c) => c,
+                                    None => break,
+                                };
+                                
+                                if c == '*'
+                                {
+                                    let next_char = self.peek_char();
+                                    match next_char
+                                    {
+                                        Some('/') =>
+                                            {
+                                                self.next_char();
+                                                break;
+                                            }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        }
+                    _ => {}
+                }
+            }
+        }
+    }
 
     pub fn tokenize(&mut self)
     {
+        // コメントを削除
+        self.remove_comments();
+        
         loop {
             let c = match self.next_char() {
                 Some(c) => c,
@@ -280,44 +352,14 @@ impl Lexer
                 '+' | '*' | '/' | '%' =>
                     {
                         self.add_token();
-                        // 次のトークンを取得して コメントアウトの場合はコメントアウトをスキップ
-                        let next_char = self.peek_char();
 
-                        match next_char {
-                            Some('/') =>
-                                {
-                                    // 一行コメントアウトの場合は、改行までスキップ
-                                    loop {
-                                        let next_char = self.next_char();
-                                        if next_char == Some('\n') {
-                                            break;
-                                        }
-                                    }
-                                }
-                            Some('*') =>
-                                {
-                                    // 複数行コメントアウトの場合は、'*/' までスキップ
-                                    loop {
-                                        let next_char = self.next_char();
-                                        if next_char == Some('*') {
-                                            let next_char = self.next_char();
-                                            if next_char == Some('/') {
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                            _ =>
-                                {
-                                    self.tokens.push(Token::Operator(match c {
-                                        '+' => Operator::Plus,
-                                        '*' => Operator::Multiply,
-                                        '/' => Operator::Divide,
-                                        '%' => Operator::Modulo,
-                                        _ => unreachable!(),
-                                    }));
-                                }
-                        }
+                        self.tokens.push(Token::Operator(match c {
+                            '+' => Operator::Plus,
+                            '*' => Operator::Multiply,
+                            '/' => Operator::Divide,
+                            '%' => Operator::Modulo,
+                            _ => unreachable!(),
+                        }));
                     }
                 '-' =>
                     {

@@ -16,7 +16,7 @@ int main(void) {
         sum = sum + count;
         count = count - 1;
     }
-    return sum; 
+    return sum;
 }
     ");
 
