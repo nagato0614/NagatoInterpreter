@@ -8,7 +8,7 @@ fn main() {
 int main(void) {
     int sum = 0;
     int i;
-    for (i = 0; i < 10; i = i + 1) {
+    for (i = 1; i <= 10; i = i + 1) {
         sum = sum + i;
     }
     return sum;

@@ -153,6 +153,23 @@ impl Interpreter
                                 let value = self.statement(rhs);
                                 self.variable_definition(variable_type, identifier, value);
                             }
+                            else { 
+                                // 初期値がない場合は 0 で初期化
+                                match variable_type
+                                {
+                                    ValueType::Int =>
+                                        {
+                                            self.insert_variable(identifier, VariableType::Int(0));
+                                        }
+                                    ValueType::Float =>
+                                        {
+                                            self.insert_variable(identifier, VariableType::Float(0.0));
+                                        }
+                                    _ => {
+                                        panic!("未対応の型です : {:?}", variable_type);
+                                    }
+                                }
+                            }
                         }
                     }
                 Leaf::FunctionDefinition(function_definition) =>
@@ -187,11 +204,19 @@ impl Interpreter
                     }
                 Leaf::WhileStatement =>
                     {
-                        return self.iteration_statement(node);
+                        return self.while_statement(node);
+                    }
+                Leaf::ForStatement(_) =>
+                    {
+                        return self.for_statement(node);
                     }
                 Leaf::Break =>
                     {
                         return VariableType::Break;
+                    }
+                Leaf::BlockItem(nodes) =>
+                    {
+                        return self.compound_statement(nodes, true);
                     }
                 _ => {
                     panic!("未対応のノードです : {:?}", val);
@@ -201,8 +226,55 @@ impl Interpreter
         VariableType::Void
     }
 
+    fn for_statement(&mut self, node: &Rc<RefCell<Node>>) -> VariableType
+    {
+        // for_statement を取得
+        if let Some(Leaf::ForStatement(for_statement)) = node.borrow().val()
+        {
+            // 初期化式を取得
+            let initializer = for_statement.initializer();
+            self.interpret_node(initializer);
+            
+            // 条件式を取得
+            let condition = for_statement.condition();
+            
+            // 更新式を取得
+            let update = for_statement.update();
+            
+            // for 文の中身を取得
+            let statement = for_statement.statement();
 
-    fn iteration_statement(&mut self, node: &Rc<RefCell<Node>>) -> VariableType
+            loop {
+                // 条件式を評価
+                let is_continue = self.condition(condition);
+                if !is_continue {
+                    break;
+                }
+                
+                // for 文の中身を実行
+                let result = self.interpret_node(statement);
+                
+                match result
+                {
+                    VariableType::Break => {
+                        break;
+                    }
+                    VariableType::Return(return_val) => {
+                        return VariableType::Return(return_val);
+                    }
+                    _ => {}
+                }
+                
+                // 更新式を実行
+                self.interpret_node(update);
+            }
+        }
+        
+        VariableType::Void
+    }
+
+
+    fn while_statement(&mut self, node: &Rc<RefCell<Node>>) -> VariableType
     {
         // while 文の条件式を取得
         if let Some(condition_root) = node.borrow().lhs()
