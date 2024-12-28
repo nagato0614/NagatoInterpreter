@@ -127,6 +127,49 @@ impl FunctionDefinition {
 }
 
 #[derive(Debug, Clone)]
+pub struct ForStatement {
+    // 初期化式
+    initializer: Rc<RefCell<Node>>,
+
+    // 条件式
+    condition: Rc<RefCell<Node>>,
+
+    // 更新式
+    update: Rc<RefCell<Node>>,
+
+    // for の中身
+    statement: Rc<RefCell<Node>>,
+}
+
+impl ForStatement
+{
+    pub fn new(initializer: Rc<RefCell<Node>>, condition: Rc<RefCell<Node>>, update: Rc<RefCell<Node>>, statement: Rc<RefCell<Node>>) -> Self {
+        ForStatement {
+            initializer,
+            condition,
+            update,
+            statement,
+        }
+    }
+
+    pub fn initializer(&self) -> &Rc<RefCell<Node>> {
+        &self.initializer
+    }
+
+    pub fn condition(&self) -> &Rc<RefCell<Node>> {
+        &self.condition
+    }
+
+    pub fn update(&self) -> &Rc<RefCell<Node>> {
+        &self.update
+    }
+
+    pub fn statement(&self) -> &Rc<RefCell<Node>> {
+        &self.statement
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Leaf
 {
     Node(Rc<RefCell<Node>>),
@@ -142,9 +185,10 @@ pub enum Leaf
 
     // 分岐
     IfStatement(Rc<RefCell<Node>>),
-    
+
     // ループ
     WhileStatement,
+    ForStatement(ForStatement),
 
     // 代入
     Assignment,
@@ -188,6 +232,7 @@ impl std::fmt::Display for Leaf
             Leaf::Operator(operator) => write!(f, "Operator [{:?}]", operator),
             Leaf::Constant(constant) => write!(f, "Constant [{:?}]", constant),
             Leaf::WhileStatement => write!(f, "WhileStatement"),
+            Leaf::ForStatement(_) => write!(f, "ForStatement"),
         }
     }
 }
@@ -283,6 +328,9 @@ impl Node {
                 }
                 Leaf::WhileStatement => {
                     println!("WhileStatement");
+                }
+                Leaf::ForStatement(_) => {
+                    println!("ForStatement");
                 }
             }
         }
@@ -526,10 +574,17 @@ impl Parser
                 Token::Identifier(identifier) => {
                     // expression_statement の場合
                     root = self.expression_statement();
+
+                    // ';' が来ることを確認
+                    self.semicolon();
                 }
                 Token::Break => {
                     // jump_statement の場合
                     root = self.jump_statement();
+                }
+                Token::For => {
+                    // iteration_statement の場合
+                    root = self.iteration_statement();
                 }
                 _ => {
                     // expression_statement の場合
@@ -544,16 +599,39 @@ impl Parser
     fn iteration_statement(&mut self) -> Rc<RefCell<Node>>
     {
         let mut root = Rc::new(RefCell::new(Node::new()));
-        root.borrow_mut().set_val(Leaf::WhileStatement);
-        
-        // 最初の while トークンを取得
-        if let Some(Token::While) = self.get_next_token()
+
+        // 最初の トークンを取得して while_statement かどうかを判定
+        if let Some(token) = self.get_next_token_without_increment()
+        {
+            match token
+            {
+                Token::While => {
+                    root = self.while_statement();
+                }
+                Token::For => {
+                    root = self.for_statement();
+                }
+                _ => {
+                    panic!("while_statement が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+                }
+            }
+        }
+
+        root
+    }
+
+    fn for_statement(&mut self) -> Rc<RefCell<Node>>
+    {
+        let mut root = Rc::new(RefCell::new(Node::new()));
+
+        // 最初の for トークンを取得
+        if let Some(Token::For) = self.get_next_token()
         {
             // 何もしない
         } else {
-            panic!("'while' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+            panic!("'for' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
         }
-        
+
         // 次のトークンが '(' かどうか
         if let Some(Token::LeftParen) = self.get_next_token()
         {
@@ -561,15 +639,20 @@ impl Parser
         } else {
             panic!("'(' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
         }
-        
+
+        // 初期化式を取得.
+        let initializer = self.expression_statement();
+        self.semicolon();
+
+
         // 条件式を取得
-        if let Some(condition) = self.logical_or_expression(&root)
-        {
-            root.borrow_mut().set_lhs(condition);
-        } else {
-            panic!("条件式が見つかりませんでした : {:?}", self.tokens[self.token_index]);
-        }
-        
+        let condition = self.logical_or_expression(&root).unwrap();
+        self.semicolon();
+
+
+        // 更新式を取得
+        let update = self.expression_statement();
+
         // 次のトークンが ')' かどうか
         if let Some(Token::RightParen) = self.get_next_token()
         {
@@ -577,7 +660,54 @@ impl Parser
         } else {
             panic!("')' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
         }
-        
+
+        // for の中身を取得
+        let statement = self.statement();
+
+        // ForStatement を作成
+        let for_statement = ForStatement::new(initializer, condition, update, statement);
+        root.borrow_mut().set_val(Leaf::ForStatement(for_statement));
+
+        root
+    }
+
+    fn while_statement(&mut self) -> Rc<RefCell<Node>>
+    {
+        let mut root = Rc::new(RefCell::new(Node::new()));
+        root.borrow_mut().set_val(Leaf::WhileStatement);
+
+        // 最初の while トークンを取得
+        if let Some(Token::While) = self.get_next_token()
+        {
+            // 何もしない
+        } else {
+            panic!("'while' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+        }
+
+        // 次のトークンが '(' かどうか
+        if let Some(Token::LeftParen) = self.get_next_token()
+        {
+            // 何もしない
+        } else {
+            panic!("'(' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+        }
+
+        // 条件式を取得
+        if let Some(condition) = self.logical_or_expression(&root)
+        {
+            root.borrow_mut().set_lhs(condition);
+        } else {
+            panic!("条件式が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+        }
+
+        // 次のトークンが ')' かどうか
+        if let Some(Token::RightParen) = self.get_next_token()
+        {
+            // 何もしない
+        } else {
+            panic!("')' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+        }
+
         // while の中身を取得
         let statement = self.statement();
         root.borrow_mut().set_rhs(statement);
@@ -679,14 +809,6 @@ impl Parser
             }
         } else {
             panic!("トークンがありません");
-        }
-
-        // ';' が来ることを確認
-        if let Some(Token::Semicolon) = self.get_next_token() {
-            println!("semicolon");
-            // 何もしない
-        } else {
-            panic!("';' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
         }
 
         root

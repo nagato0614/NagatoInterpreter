@@ -94,10 +94,12 @@ pub enum Token {
     If,                        // `if`
     Else,                      // `else`
     While,                     // `while`
+    For,                       // `for`
 
     // 演算子
     Operator(Operator),        // 演算子を含む
     UnaryOperator(UnaryOperator), // 単項演算子
+    
     // 代入演算子
     Assign,                    // `=`
 
@@ -123,6 +125,7 @@ impl Token
             "return" => Some(Token::Return),
             "continue" => Some(Token::Continue),
             "break" => Some(Token::Break),
+            "for" => Some(Token::For),
 
             // 数値の場合
             _ if keyword.parse::<i64>().is_ok() =>
@@ -294,7 +297,7 @@ impl Lexer
     fn macro_replace(&mut self)
     {
         let mut new_sentence = String::new();
-        
+
         // マクロの定義後から undef までの行を取得し置換する
         let lines = self.sentence.lines().collect::<Vec<&str>>();
         for (i, line) in lines.iter().enumerate()
@@ -318,7 +321,7 @@ impl Lexer
                 new_sentence.push('\n');
             }
         }
-        
+
         self.sentence = new_sentence;
     }
 
@@ -372,8 +375,6 @@ impl Lexer
 
         // # で始まる行をすべて削除
         self.sentence = self.sentence.lines().filter(|line| !line.starts_with("#")).collect::<Vec<&str>>().join("\n");
-        
-        println!("{}", self.sentence);
     }
 
     pub fn tokenize(&mut self)

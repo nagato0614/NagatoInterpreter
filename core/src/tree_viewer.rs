@@ -33,6 +33,7 @@ impl TreeViewer {
             Leaf::FunctionDefinition(func) => format!("{}: Function Definition [{:?}]", self.node_index, func.name()),
             Leaf::IfStatement(_) => format!("{}: If Statement", self.node_index),
             Leaf::BlockItem(_) => format!("{}: Block Item", self.node_index),
+            Leaf::ForStatement(_) => format!("{}: For Statement", self.node_index),
             _ => format!("{}: {:?}", self.node_index, leaf),
         };
 
@@ -44,6 +45,18 @@ impl TreeViewer {
             Leaf::FunctionDefinition(func) => self.add_nodes_and_edges(graph_node, func.body()),
             Leaf::FunctionCall(func) => self.add_nodes_and_edges(graph_node, func.arguments()),
             Leaf::BlockItem(block) => self.add_nodes_and_edges(graph_node, block),
+            Leaf::ForStatement(for_stmt) => {
+                let initializer = for_stmt.initializer();
+                let condition = for_stmt.condition();
+                let increment = for_stmt.update();
+                let body = for_stmt.statement();
+                
+                self.add_node_and_edge(graph_node, initializer);
+                self.add_node_and_edge(graph_node, condition);
+                self.add_node_and_edge(graph_node, increment);
+                self.add_node_and_edge(graph_node, body);
+                
+            }
             _ => {}
         }
 
@@ -57,6 +70,13 @@ impl TreeViewer {
             }
         }
     }
+    
+    fn add_node_and_edge(&mut self, parent_node: NodeIndex, node: &Rc<RefCell<Node>>) {
+        if let Some(node_index) = self.add_node(node) {
+            self.graph.add_edge(parent_node, node_index, String::from(""));
+        }
+    }
+    
     fn add_node(&mut self, node: &Rc<RefCell<Node>>) -> Option<NodeIndex> {
         if let Some(val) = node.borrow().val() {
             println!("val: {:?}", val);

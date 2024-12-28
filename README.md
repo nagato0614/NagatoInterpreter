@@ -50,7 +50,6 @@ int main() {
 
 ```
 
-
 ## 仕様
 
 基本的にはC言語の仕様をベースにしているが, 以下の点が異なる.
@@ -66,7 +65,8 @@ int main() {
 - 3項演算子は取り扱わない
 - ビット演算は取り扱わない
 - ループは while 文のみ
-- 
+-
+
 ## BNF
 
 ```
@@ -98,14 +98,14 @@ type_specifier ::= void
 compound_statement ::= '{' {block_item}* '}'
 block_item ::= declaration ';'
               | statement
-statement ::= expression_statement
+statement ::= expression_statement ';'
               | compound_statement
               | selection_statement
               | iteration_statement
               | jump_statement
 
 // 変数の初期化
-expression_statement ::= {assignment_expression}? ';'
+expression_statement ::= {assignment_expression}? 
 assignment_expression ::= identifier '=' logical_or_expression ';'
 
 // if文
@@ -113,8 +113,10 @@ selection_statement ::= if '(' logical_or_expression ')' statement
                         | if '(' logical_or_expression ')' statement else statement
                         
 // while文
-iteration_statement ::= while '(' logical_or_expression ')' compound_statement
-
+iteration_statement ::= while_statement
+                        | for_statement
+while_statement ::= while '(' logical_or_expression ')' statement
+for_statement ::= for '(' {expression_statement}? ';' {logical_or_expression}? ';' {expression_statement}? ')' statement
                           
 // 演算子周りの優先順位
 // OR 演算子
@@ -185,7 +187,7 @@ jump_statement ::= continue ';'
 出現する要素とそれぞれの日本語訳
 
 | 要素                         | 日本語訳         |
-|____________________________|______________|
+|----------------------------|--------------|
 | translation_unit           | 翻訳単位         |
 | external_declaration       | 外部宣言         |
 | function_definition        | 関数定義         |
