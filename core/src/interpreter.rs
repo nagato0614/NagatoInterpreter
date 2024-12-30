@@ -179,7 +179,14 @@ impl Interpreter
                                     self.array_variable_definition(&variable_type, identifier, 
                                                                    *size);
                                 } else {
-                                    let value = self.statement(rhs);
+                                    let mut value = self.statement(rhs);
+                                    
+                                    // value が 定数ではなく Return の時中身を取り出す
+                                    if let VariableType::Return(val) = value
+                                    {
+                                        value = val.as_ref().clone();
+                                    }
+                                    
                                     self.variable_definition(variable_type, identifier, value);
                                 }
                             } else {
@@ -477,11 +484,19 @@ impl Interpreter
 
             if let Some(rhs) = node.borrow().rhs()
             {
-                let value = self.statement(rhs);
+                let mut value = self.statement(rhs);
                 // ローカル変数から検索
                 if let Some(local_variables) = self.local_variables.last_mut()
                 {
                     println!("local_variables : {:?} = {:?}", local_variables, value);
+                    
+                    // value が 定数ではなく Return の時中身を取り出す
+                    if let VariableType::Return(val) = value
+                    {
+                        println!("convert return value : {:?}", val);
+                        value = val.as_ref().clone();
+                    }
+                    
                     // 最後のスコープから検索
                     for local_variable in local_variables.iter_mut().rev()
                     {
@@ -495,6 +510,7 @@ impl Interpreter
                         }
                     }
                     println!("global_variables : {:?}", self.global_variables);
+                    
                     // グローバル変数から検索
                     if let Some(variable) = self.global_variables.get_mut(&identifier)
                     {
@@ -937,9 +953,14 @@ impl Interpreter
 
     fn operator(&mut self, op: &Operator, lhs: &Rc<RefCell<Node>>, rhs: &Rc<RefCell<Node>>) -> VariableType
     {
-        let lhs = self.statement(lhs);
-        let rhs = self.statement(rhs);
+        let mut lhs = self.statement(lhs);
+        let mut rhs = self.statement(rhs);
         let mut result: VariableType = Int(0);
+        
+        // 左右の値からreturn を除去する
+        lhs = self.remove_return(lhs);
+        rhs = self.remove_return(rhs);
+        
         match op
         {
             Operator::LogicalOr =>
@@ -1005,7 +1026,7 @@ impl Interpreter
     // 加算演算子　'+'
     fn add(&mut self, lhs: VariableType, rhs: VariableType) -> VariableType
     {
-        match (lhs, rhs)
+        match (lhs.clone(), rhs.clone())
         {
             (VariableType::Int(lhs), VariableType::Int(rhs)) =>
                 {
@@ -1024,7 +1045,7 @@ impl Interpreter
                     VariableType::Float(lhs + rhs)
                 }
             _ => {
-                panic!("未対応の型です");
+                panic!("未対応の型です : {:?}, {:?}", lhs, rhs);
             }
         }
     }
@@ -1032,7 +1053,7 @@ impl Interpreter
     // 減算演算子　'-'
     fn sub(&mut self, lhs: VariableType, rhs: VariableType) -> VariableType
     {
-        match (lhs, rhs)
+        match (lhs.clone(), rhs.clone())
         {
             (VariableType::Int(lhs), VariableType::Int(rhs)) =>
                 {
@@ -1051,7 +1072,7 @@ impl Interpreter
                     VariableType::Float(lhs - rhs)
                 }
             _ => {
-                panic!("未対応の型です");
+                panic!("未対応の型です : {:?}, {:?}", lhs, rhs);
             }
         }
     }
@@ -1430,13 +1451,22 @@ impl Interpreter
         }
         identifier
     }
+    
+    fn remove_return(&mut self, leaf: VariableType) -> VariableType
+    {
+        match leaf
+        {
+            VariableType::Return(val) => val.as_ref().clone(),
+            _ => leaf
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests
 {
     use crate::interpreter::VariableType::{Float, Int};
-    use crate::interpreter::{Interpreter, Variable, VariableType};
+    use crate::interpreter::{Array, Interpreter, Variable, VariableType};
     use crate::parser::Parser;
     use std::collections::HashMap;
     use crate::lexical::Lexer;
@@ -1448,6 +1478,8 @@ mod tests
         int x = (10 + 20) * 3 - 4 / 2;
         int fib = 0;
         int sum = 0;
+        int result[10];
+
         int add(int a, int b) { return a + b; }
         int sub(int a, int b) { return a - b; }
         int fibo(int n) {
@@ -1467,11 +1499,18 @@ mod tests
             int c = sub(a, b);
             int d = c + x;
             fib = fibo(10);
-
-            int count  = 0;
+            
+            int count = 0;
             while (count < 10) {
                 sum = sum + count;
                 count = count + 1;
+            }
+            
+            int i;
+            result[0] = 0;
+            result[1] = 1;
+            for (i = 2; i < 10; i = i + 1) {
+                result[i] = result[i - 1] + result[i - 2];
             }
 
             return d;
@@ -1492,12 +1531,18 @@ mod tests
 
         // global 変数の値を確認する
         let global_variables = interpreter.global_variables();
-        assert_eq!(global_variables.len(), 3);
+        assert_eq!(global_variables.len(), 4);
 
         let mut variables = HashMap::new();
         variables.insert("x".to_string(), Variable::Value(Int(88)));
         variables.insert("fib".to_string(), Variable::Value(Int(55)));
         variables.insert("sum".to_string(), Variable::Value(Int(45)));
+        
+        // フィボナッチ数列の計算
+        let fib = vec![0, 1, 1, 2, 3, 5, 8, 13, 21, 34];
+        let array = Variable::Array(Array::new("result".to_string(), VariableType::Int(0), fib.iter().map(|&x| Int(x)).collect()));
+        variables.insert("result".to_string(), array);
+        
 
         for (name, variable) in global_variables
         {
@@ -1507,6 +1552,10 @@ mod tests
                 Variable::Value(value) =>
                     {
                         assert_eq!(variables.get(name).unwrap(), &Variable::Value(value.clone()));
+                    }
+                Variable::Array(array) =>
+                    {
+                        assert_eq!(variables.get(name).unwrap(), &Variable::Array(array.clone()));
                     }
                 _ => {
                     panic!("未対応の変数です");
