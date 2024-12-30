@@ -6,25 +6,9 @@ use core::interpreter::Interpreter;
 fn main() {
     let program = String::from("
 int result[10];
-void main()
-{   
-    int i;
-    for (i = 0; i < 10; i = i + 1)
-    {
-        if (i == 0)
-        {
-            result[i] = 0;
-        }
-        else if (i == 1)
-        {
-            result[i] = 1;
-        }
-        else
-        {
-            result[i] = result[i - 1] + result[i - 2];
-        }
-    }
-    return 0;
+void main() {
+    result[1] = 1;
+    return result[1];
 }
     ");
 

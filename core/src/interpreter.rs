@@ -150,20 +150,28 @@ impl Interpreter
                             // node の右側から値を取得
                             if let Some(rhs) = node.borrow().rhs()
                             {
-                                let value = self.statement(rhs);
-                                self.variable_definition(variable_type, identifier, value);
-                            }
-                            else { 
+                                if let Leaf::Array(size) = rhs.borrow().val().unwrap()
+                                {
+                                    let mut values = Vec::new();
+                                    for _ in 0..*size
+                                    {
+                                        values.push(VariableType::Int(0));
+                                    }
+                                } else {
+                                    let value = self.statement(rhs);
+                                    self.variable_definition(variable_type, identifier, value);
+                                }
+                            } else {
                                 // 初期値がない場合は 0 で初期化
                                 match variable_type
                                 {
                                     ValueType::Int =>
                                         {
-                                            self.insert_variable(identifier, VariableType::Int(0));
+                                            self.insert_variable_int(identifier, 0);
                                         }
                                     ValueType::Float =>
                                         {
-                                            self.insert_variable(identifier, VariableType::Float(0.0));
+                                            self.insert_variable_float(identifier, 0.0);
                                         }
                                     _ => {
                                         panic!("未対応の型です : {:?}", variable_type);
@@ -234,13 +242,13 @@ impl Interpreter
             // 初期化式を取得
             let initializer = for_statement.initializer();
             self.interpret_node(initializer);
-            
+
             // 条件式を取得
             let condition = for_statement.condition();
-            
+
             // 更新式を取得
             let update = for_statement.update();
-            
+
             // for 文の中身を取得
             let statement = for_statement.statement();
 
@@ -250,10 +258,10 @@ impl Interpreter
                 if !is_continue {
                     break;
                 }
-                
+
                 // for 文の中身を実行
                 let result = self.interpret_node(statement);
-                
+
                 match result
                 {
                     VariableType::Break => {
@@ -264,12 +272,12 @@ impl Interpreter
                     }
                     _ => {}
                 }
-                
+
                 // 更新式を実行
                 self.interpret_node(update);
             }
         }
-        
+
         VariableType::Void
     }
 
@@ -431,20 +439,36 @@ impl Interpreter
         {
             ValueType::Int =>
                 {
-                    if let VariableType::Float(val) = value
+                    match value
                     {
-                        self.insert_variable(identifier, VariableType::Int(val as i32));
-                    } else {
-                        self.insert_variable(identifier, value);
+                        VariableType::Float(val) =>
+                            {
+                                self.insert_variable(identifier, Variable::Value(VariableType::Int(val as i32)));
+                            }
+                        VariableType::Int(val) =>
+                            {
+                                self.insert_variable(identifier, Variable::Value(VariableType::Int(val)));
+                            }
+                        _ => {
+                            panic!("未対応の型です : {:?}", value);
+                        }
                     }
                 }
             ValueType::Float =>
                 {
-                    if let VariableType::Int(val) = value
+                    match value
                     {
-                        self.insert_variable(identifier, VariableType::Float(val as f64));
-                    } else {
-                        self.insert_variable(identifier, value);
+                        VariableType::Float(val) =>
+                            {
+                                self.insert_variable(identifier, Variable::Value(VariableType::Float(val)));
+                            }
+                        VariableType::Int(val) =>
+                            {
+                                self.insert_variable(identifier, Variable::Value(VariableType::Float(val as f64)));
+                            }
+                        _ => {
+                            panic!("未対応の型です : {:?}", value);
+                        }
                     }
                 }
             _ => {
@@ -453,19 +477,29 @@ impl Interpreter
         }
     }
 
-    fn insert_variable(&mut self, identifier: String, value: VariableType)
+    fn insert_variable_int(&mut self, identifier: String, value: i32)
+    {
+        self.insert_variable(identifier, Variable::Value(VariableType::Int(value)));
+    }
+
+    fn insert_variable_float(&mut self, identifier: String, value: f64)
+    {
+        self.insert_variable(identifier, Variable::Value(VariableType::Float(value)));
+    }
+
+    fn insert_variable(&mut self, identifier: String, value: Variable)
     {
         match self.scope
         {
             Scope::Global =>
                 {
-                    self.global_variables.insert(identifier, Variable::Value(value));
+                    self.global_variables.insert(identifier, value);
                 }
             Scope::Local =>
                 {
                     if let Some(local_variables) = self.local_variables.last_mut()
                     {
-                        local_variables.last_mut().unwrap().insert(identifier, Variable::Value(value));
+                        local_variables.last_mut().unwrap().insert(identifier, value);
                     }
                 }
         }
