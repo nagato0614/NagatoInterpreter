@@ -99,7 +99,7 @@ pub enum Token {
     // 演算子
     Operator(Operator),        // 演算子を含む
     UnaryOperator(UnaryOperator), // 単項演算子
-    
+
     // 代入演算子
     Assign,                    // `=`
 

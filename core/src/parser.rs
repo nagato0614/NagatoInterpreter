@@ -179,6 +179,7 @@ pub enum Leaf
     FunctionCall(FunctionCall),
     ArrayAccess,
     ParenthesizedExpression,
+    Array(usize),
 
     // {, }
     BlockItem(Vec<Rc<RefCell<Node>>>),
@@ -192,6 +193,7 @@ pub enum Leaf
 
     // 代入
     Assignment,
+    ArrayAssignment(Rc<RefCell<Node>>),
 
     // jump系の文
     Return,
@@ -233,6 +235,8 @@ impl std::fmt::Display for Leaf
             Leaf::Constant(constant) => write!(f, "Constant [{:?}]", constant),
             Leaf::WhileStatement => write!(f, "WhileStatement"),
             Leaf::ForStatement(_) => write!(f, "ForStatement"),
+            Leaf::Array(size) => write!(f, "Array [{:?}]", size),
+            Leaf::ArrayAssignment(size) => write!(f, "ArrayAssignment"),
         }
     }
 }
@@ -331,6 +335,12 @@ impl Node {
                 }
                 Leaf::ForStatement(_) => {
                     println!("ForStatement");
+                }
+                Leaf::Array(size) => {
+                    println!("Array [{:?}]", size);
+                }
+                Leaf::ArrayAssignment(size) => {
+                    println!("ArrayAssignment");
                 }
             }
         }
@@ -775,8 +785,32 @@ impl Parser
             panic!("';' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
         }
     }
-
     fn expression_statement(&mut self) -> Rc<RefCell<Node>>
+    {
+        let mut root = Rc::new(RefCell::new(Node::new()));
+
+        let identifier = self.tokens[self.token_index].clone();
+        let next_token = self.tokens[self.token_index + 1].clone();
+        
+        // next_token が '=' なら assignment として処理する
+        match next_token
+        {
+            Token::Assign => {
+                root = self.assignment();
+            }
+            Token::LeftBracket => {
+                root = self.array_assignment();
+            }
+            _ => {
+                // それ以外は expression として処理する
+                root = self.logical_or_expression(&root).unwrap();
+            }
+        }
+        
+        root
+    }
+
+    fn assignment(&mut self) -> Rc<RefCell<Node>>
     {
         let mut root = Rc::new(RefCell::new(Node::new()));
         root.borrow_mut().set_val(Leaf::Assignment);
@@ -810,6 +844,68 @@ impl Parser
         } else {
             panic!("トークンがありません");
         }
+
+        root
+    }
+
+    fn array_assignment(&mut self) -> Rc<RefCell<Node>>
+    {
+        let mut root = Rc::new(RefCell::new(Node::new()));
+
+        // identifier を取得
+        if let Some(Token::Identifier(identifier)) = self.get_next_token()
+        {
+            let left_node = Rc::new(RefCell::new(Node::new()));
+            left_node.borrow_mut().set_val(Leaf::Identifier(identifier));
+            root.borrow_mut().set_lhs(left_node);
+        } else {
+            panic!("識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+        }
+        
+        // '[' が来ることを確認
+        if let Some(Token::LeftBracket) = self.get_next_token()
+        {
+            // 何もしない
+        } else {
+            panic!("'[' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+        }
+        
+        // アクセスするindex (添字) を取得
+        if let Some(index) = self.logical_or_expression(&root)
+        {
+            root.borrow_mut().set_val(Leaf::ArrayAssignment(index));
+        } else {
+            panic!("添字が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+        }
+        
+        // ']' が来ることを確認
+        if let Some(Token::RightBracket) = self.get_next_token()
+        {
+            // 何もしない
+        } else {
+            panic!("']' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+        }
+        
+        // 次のトークンが '=' かどうか
+        if let Some(next_token) = self.get_next_token()
+        {
+            match next_token
+            {
+                Token::Assign => {
+                    // '=' の場合は initializer をパースする
+                    if let Some(initializer) = self.logical_or_expression(&root) {
+                        println!("initializer");
+                        root.borrow_mut().set_rhs(initializer);
+                    }
+                }
+                _ => {
+                    panic!("初期化子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+                }
+            }
+        } else {
+            panic!("トークンがありません");
+        }
+        
 
         root
     }
@@ -949,6 +1045,26 @@ impl Parser
                 Token::Semicolon => {
                     // 何もしない
                 }
+                Token::LeftBracket => {
+                    println!("array");
+                    // 配列の場合
+                    if let Some(Token::Constant(Constant::Integer(size))) = self.get_next_token() {
+                        let right_node = Rc::new(RefCell::new(Node::new()));
+                        right_node.borrow_mut().set_val(Leaf::Array(size as usize));
+                        root.borrow_mut().set_rhs(right_node);
+                    } else {
+                        panic!("配列のサイズが見つかりませんでした : {:?}", self.tokens[self.token_index]);
+                    }
+
+                    // 正しく配列のサイズが取得できた場合
+                    if let Some(Token::RightBracket) = self.get_next_token() {
+                        // 何もしない
+                    } else {
+                        panic!("']' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+                    }
+
+                    self.semicolon();
+                }
                 _ => {
                     panic!("初期化子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
                 }
@@ -958,6 +1074,7 @@ impl Parser
         }
         root
     }
+
 
     fn logical_or_expression(&mut self, parent: &Rc<RefCell<Node>>) -> Option<Rc<RefCell<Node>>>
     {
@@ -1264,6 +1381,7 @@ impl Parser
                                 node.borrow_mut().set_val(Leaf::FunctionCall(function_call));
                             }
                             Token::LeftBracket => {
+                                self.token_index_increment();
                                 // 配列の場合
                                 node.borrow_mut().set_val(Leaf::ArrayAccess);
 

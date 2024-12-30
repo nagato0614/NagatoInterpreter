@@ -5,13 +5,15 @@ use core::interpreter::Interpreter;
 
 fn main() {
     let program = String::from("
-int main(void) {
-    int sum = 0;
+int result[10];
+void main() {
     int i;
-    for (i = 1; i <= 10; i = i + 1) {
-        sum = sum + i;
+    result[0] = 0;
+    result[1] = 1;
+    for (i = 2; i < 10; i = i + 1) {
+        result[i] = result[i - 1] + result[i - 2];
     }
-    return sum;
+    return result[9];
 }
     ");
 

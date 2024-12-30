@@ -34,6 +34,7 @@ impl TreeViewer {
             Leaf::IfStatement(_) => format!("{}: If Statement", self.node_index),
             Leaf::BlockItem(_) => format!("{}: Block Item", self.node_index),
             Leaf::ForStatement(_) => format!("{}: For Statement", self.node_index),
+            Leaf::ArrayAssignment(_) => format!("{}: Array Assignment", self.node_index),
             _ => format!("{}: {:?}", self.node_index, leaf),
         };
 

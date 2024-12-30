@@ -106,7 +106,10 @@ statement ::= expression_statement ';'
 
 // 変数の初期化
 expression_statement ::= {assignment_expression}? 
-assignment_expression ::= identifier '=' logical_or_expression ';'
+assignment_expression ::= assinment ';'
+                          | array_assignment ';'
+assignment ::= identifier '=' logical_or_expression
+array_assignment ::= identifier '[' logical_or_expression ']' '=' logical_or_expression 
 
 // if文
 selection_statement ::= if '(' logical_or_expression ')' statement
@@ -152,6 +155,7 @@ unary_operator ::= '-'
 postfix_expression ::= primary_expression                               // 単項演算子
                        | identifier                                     // 変数
                        | identifier '(' {logical_or_expression}* {',' logical_or_expression}* ')'    // 関数呼び出し
+                       | identifier '[' logical_or_expression ']'         // 配列
 
 primary_expression ::= constant
                        | '(' logical_or_expression ')'
@@ -166,7 +170,8 @@ declaration ::=  type_specifier init_declarator
 init_declarator ::= direct_declarator                      // 宣言だけ
                     | direct_declarator '=' logical_or_expression    // 初期化付きの宣言
 direct_declarator ::= identifier                           // 変数宣言 
-                      | identifier '(' {identifier}* ')'   // 関数宣言 : 呼び出し時に使用する
+                      | identifier '[' integer_constant ']' // 配列宣言
+                      
           
 parameter_list ::= parameter_declaration                        // 1つのパラメータ
                    | parameter_list ',' parameter_declaration   // 複数のパラメータ
