@@ -1,7 +1,7 @@
 use crate::interpreter::VariableType::Int;
 use crate::lexical::{Constant, Operator, UnaryOperator, ValueType};
 use crate::parser::{FunctionCall, FunctionDefinition, Leaf, Node};
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::rc::Rc;
@@ -10,7 +10,31 @@ use std::rc::Rc;
 pub struct Array
 {
     name: String,
+    variable_type: VariableType,
     values: Vec<VariableType>,
+}
+
+impl Array
+{
+    pub fn new(name: String, variable_type: VariableType, values: Vec<VariableType>) -> Self
+    {
+        Array { name, variable_type, values }
+    }
+
+    pub fn name(&self) -> &String
+    {
+        &self.name
+    }
+
+    pub fn variable_type(&self) -> &VariableType
+    {
+        &self.variable_type
+    }
+
+    pub fn values(&self) -> &Vec<VariableType>
+    {
+        &self.values
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -127,7 +151,7 @@ impl Interpreter
                     }
                 Variable::Array(array) =>
                     {
-                        unimplemented!("配列の表示は未実装です");
+                        // unimplemented!("配列の表示は未実装です");
                     }
             }
         }
@@ -152,11 +176,8 @@ impl Interpreter
                             {
                                 if let Leaf::Array(size) = rhs.borrow().val().unwrap()
                                 {
-                                    let mut values = Vec::new();
-                                    for _ in 0..*size
-                                    {
-                                        values.push(VariableType::Int(0));
-                                    }
+                                    self.array_variable_definition(&variable_type, identifier, 
+                                                                   *size);
                                 } else {
                                     let value = self.statement(rhs);
                                     self.variable_definition(variable_type, identifier, value);
@@ -226,11 +247,75 @@ impl Interpreter
                     {
                         return self.compound_statement(nodes, true);
                     }
+                Leaf::ArrayAssignment(_) =>
+                    {
+                        return self.array_assignment(node);
+                    }
                 _ => {
                     panic!("未対応のノードです : {:?}", val);
                 }
             }
         }
+        VariableType::Void
+    }
+
+    fn array_assignment(&mut self, node: &Rc<RefCell<Node>>) -> VariableType
+    {
+        // アクセスするindex を計算する
+        if let Some(Leaf::ArrayAssignment(index_root)) =
+            node.borrow().val().clone()
+        {
+            let index = self.statement(index_root);
+            let index = match index
+            {
+                VariableType::Int(val) => val,
+                _ => panic!("Array index は整数で指定してください")
+            };
+
+            // 左辺に識別子があり, 変数として登録されていることを確認する
+            if let Some(lhs) = node.borrow().lhs()
+            {
+                let identifier = self.identifier_name(lhs);
+
+                if let Some(rhs) = node.borrow().rhs()
+                {
+                    let value = self.statement(rhs);
+                    // ローカル変数から検索
+                    if let Some(local_variables) = self.local_variables.last_mut()
+                    {
+                        // 最後のスコープから検索
+                        for local_variable in local_variables.iter_mut().rev()
+                        {
+                            if let Some(variable) = local_variable.get_mut(&identifier)
+                            {
+                                if let Variable::Array(array) = variable
+                                {
+                                    array.values[index as usize] = value;
+                                    return VariableType::Void;
+                                }
+                            }
+                        }
+                        // グローバル変数から検索
+                        if let Some(variable) = self.global_variables.get_mut(&identifier)
+                        {
+                            if let Variable::Array(array) = variable
+                            {
+                                array.values[index as usize] = value;
+                            } else {
+                                panic!("Global 変数が見つかりません : {}", identifier);
+                            }
+                        } else {
+                            panic!("Global 変数が見つかりません : {}", identifier);
+                        }
+                    }
+                } else {
+                    panic!("右辺に識別子があ��ません");
+                }
+            } else {
+                panic!("左辺に識別子がありません");
+            }
+        }
+
         VariableType::Void
     }
 
@@ -433,6 +518,31 @@ impl Interpreter
         VariableType::Void
     }
 
+    fn array_variable_definition(&mut self, value_type: &ValueType, identifier: String, size: usize)
+    {
+        let mut values = Vec::new();
+        for _ in 0..size
+        {
+            match value_type
+            {
+                ValueType::Int =>
+                    {
+                        values.push(VariableType::Int(0));
+                    }
+                ValueType::Float =>
+                    {
+                        values.push(VariableType::Float(0.0));
+                    }
+                _ => {
+                    panic!("未対応の型です : {:?}", value_type);
+                }
+            }
+        }
+
+        let array = Array::new(identifier.clone(), VariableType::Int(0), values);
+        self.insert_variable(identifier, Variable::Array(array));
+    }
+
     fn variable_definition(&mut self, value_type: &ValueType, identifier: String, value: VariableType)
     {
         match value_type
@@ -562,6 +672,10 @@ impl Interpreter
 
                         return value;
                     }
+                Leaf::ArrayAccess =>
+                    {
+                        return self.array_access(node);
+                    }
                 _ => {
                     panic!("未対応のノードです : {:?}", val);
                 }
@@ -569,6 +683,68 @@ impl Interpreter
         }
 
         panic!("未対応のノードです");
+    }
+    
+    fn array_access(&mut self, node: &Rc<RefCell<Node>>) -> VariableType
+    {
+        // ArrayAccess を取得
+        if let Some(Leaf::ArrayAccess) = node.borrow().val()
+        {}
+        else { 
+            panic!("ArrayAccess が取得できません");
+        }
+        
+        // 左辺に識別子があり, 変数として登録されていることを確認する
+        if let Some(lhs) = node.borrow().lhs()
+        {
+            let identifier = self.identifier_name(lhs);
+            
+            // 右辺に index があることを確認する
+            if let Some(rhs) = node.borrow().rhs()
+            {
+                let index = self.statement(rhs);
+                let index = match index
+                {
+                    VariableType::Int(val) => val,
+                    _ => panic!("Array index は整数で指定してください")
+                };
+                
+                // ローカル変数から検索
+                if let Some(local_variables) = self.local_variables.last_mut()
+                {
+                    // 最後のスコープから検索
+                    for local_variable in local_variables.iter_mut().rev()
+                    {
+                        if let Some(variable) = local_variable.get_mut(&identifier)
+                        {
+                            if let Variable::Array(array) = variable
+                            {
+                                return array.values[index as usize].clone();
+                            }
+                        }
+                    }
+                    // グローバル変数から検索
+                    if let Some(variable) = self.global_variables.get_mut(&identifier)
+                    {
+                        if let Variable::Array(array) = variable
+                        {
+                            return array.values[index as usize].clone();
+                        } else {
+                            panic!("Global 変数が見つかりません : {}", identifier);
+                        }
+                    } else {
+                        panic!("Global 変数が見つかりません : {}", identifier);
+                    }
+                }
+            } else {
+                panic!("右辺に index がありません");
+            }
+        } else {
+            panic!("左辺に識別子がありません");
+        }
+        
+        
+        VariableType::Void
     }
 
     fn function_call(&mut self, function_call: &FunctionCall) -> VariableType
