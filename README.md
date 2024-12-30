@@ -6,48 +6,46 @@ c言語をベースとして一部仕様を切り取っている.
 ## プログラムの例
 
 ```c
-int add(int a, int b) {
-    int result;
-    result = a + b;
-    return result;
-}
+int x = (10 + 20) * 3 - 4 / 2;
+int fib = 0;
+int sum = 0;
+int result[10];
 
-float multiply(float x, float y) {
-    float product = x * y;
-    return product;
-}
-
-void print_numbers(int n) {
-    int i = 0;
-    while (i < n) {
-        i = i + 1;
-        continue;
-    }
-}
-
-int main() {
-    int sum;
-    float product;
-    sum = add(5, 10);
-    product = multiply(2.5, 4.0);
-
-    if (sum > 10) {
-        sum = sum - 1;
-    } else {
-        sum = sum + 1;
-    }
-
-    print_numbers(5);
-    
-    if (sum > 10) {
-        return 1;
-    } else if (sum <= 10) {
-        return 2;
-    } else {
+int add(int a, int b) { return a + b; }
+int sub(int a, int b) { return a - b; }
+int fibo(int n) {
+    if (n == 0) {
         return 0;
+    } else if (n == 1) {
+        return 1;
+    } else {
+        return fibo(n - 1) + fibo(n - 2);
     }
 }
 
+int main(void) {
+    int a = 10;
+    int b = 20;
+    a = add(a * 2, (b + 10) / 2);
+    int c = sub(a, b);
+    int d = c + x;
+    fib = fibo(10);
+    
+    int count = 0;
+    while (count < 10) {
+        sum = sum + count;
+        count = count + 1;
+    }
+    
+    int i;
+    result[0] = 0;
+    result[1] = 1;
+    for (i = 2; i < 10; i = i + 1) {
+        result[i] = result[i - 1] + result[i - 2];
+    }
+
+    return d;
+}
 ```
 
 ## 仕様
