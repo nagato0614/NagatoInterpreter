@@ -94,3 +94,4 @@ target
 *.out
 *.dot
 line.txt
+output*

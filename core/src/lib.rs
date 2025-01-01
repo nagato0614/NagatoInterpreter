@@ -2,6 +2,7 @@ pub mod lexical;
 pub mod parser;
 pub mod interpreter;
 pub mod tree_viewer;
+pub mod llvm_ir;
 
 #[cfg(test)]
 mod test

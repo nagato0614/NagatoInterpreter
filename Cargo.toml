@@ -7,7 +7,13 @@ edition = "2021"
 name = "NagatoInterpreter"
 path = "src/main.rs"
 
+[[bin]]
+name = "NagatoCompiler"
+path = "src/compiler.rs"
+
 [dependencies]
 regex = "1.7"
 core = { path = "./core" }
 petgraph = "0.6.5"
+anyhow = "1.0.95"
+inkwell = { version = "0.5.0", features = ["llvm18-0"] }
