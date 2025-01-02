@@ -100,10 +100,14 @@ fn easy_compiler() -> Result<(), Box<dyn Error>>
 
 
 fn main() -> Result<(), Box<dyn Error>> {
-
     let program = String::from("
 int a = 0;
 int b = 1;
+
+int main()
+{
+    return 0;
+}
     ");
 
 
@@ -128,9 +132,9 @@ int b = 1;
         tree_viewer.make_tree(root);
     }
     tree_viewer.output_dot("trees/output.dot");
-    
+
     let roots = parser.roots();
-    compile(roots);
-    
+    compile(roots)?;
+
     Ok(())
 }
