@@ -67,7 +67,7 @@ pub enum ValueType {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Constant {
     Integer(i32),
-    Float(f64),
+    Float(f32),
 }
 
 /// トークン
@@ -131,7 +131,7 @@ impl Token
             _ if keyword.parse::<i64>().is_ok() =>
                 Some(Token::Constant(Constant::Integer(keyword.parse::<i32>().unwrap()))),
             _ if keyword.parse::<f64>().is_ok() =>
-                Some(Token::Constant(Constant::Float(keyword.parse::<f64>().unwrap()))),
+                Some(Token::Constant(Constant::Float(keyword.parse::<f32>().unwrap()))),
             _ => None,
         }
     }

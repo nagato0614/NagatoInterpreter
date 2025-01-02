@@ -942,7 +942,7 @@ impl Interpreter
                 }
             Constant::Float(val) =>
                 {
-                    VariableType::Float(*val)
+                    VariableType::Float((*val).into())
                 }
             _ => {
                 panic!("未対応の定数です : {:?}", value);
