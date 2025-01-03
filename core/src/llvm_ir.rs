@@ -1,9 +1,9 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use inkwell::builder::Builder;
+use inkwell::builder::{Builder, BuilderError};
 use inkwell::context::Context;
 use inkwell::module::Module;
-use inkwell::values::{FunctionValue, PointerValue};
+use inkwell::values::{FunctionValue, InstructionValue, PointerValue};
 use inkwell::OptimizationLevel;
 use std::error::Error;
 use std::path::Path;
@@ -78,6 +78,10 @@ impl<'ctx> CodeGen<'ctx>
                     {
                         self.declare_variable(root);
                     }
+                Leaf::FunctionDefinition(_) =>
+                    {
+                        self.function_definition(root);
+                    }
                 _ => {
                     return Err("対応していないノードです".into());
                 }
@@ -87,6 +91,130 @@ impl<'ctx> CodeGen<'ctx>
         } else {
             Err("ノードが見つかりません".into())
         }
+    }
+
+    fn function_definition(&mut self, node: &Rc<RefCell<Node>>) {
+        let function_name = self.get_function_name(node);
+        let function_type = self.get_function_type(node);
+        let function_body = self.get_function_body(node);
+
+        // 関数を定義
+        let function = self.define_function(&function_name, &function_type);
+
+        // 関数の本体をコンパイル
+        if function_body.len() == 0 {
+            match function_type {
+                ValueType::Void => {
+                    // None なので型を指定する必要がないが, 型推論を解決できないため明示的に指定
+                    self.add_ret::<inkwell::values::IntValue<'ctx>>(None);
+                }
+                ValueType::Int => {
+                    self.add_ret(Some(self.context.i32_type().const_int(0, false)));
+                }
+                _ => panic!("未対応の関数型です"),
+            }
+        } else {
+            for node in function_body {
+                self.compile_node(node);
+            }
+        }
+    }
+
+
+    fn compile_node(&mut self, node: Rc<RefCell<Node>>) {
+        if let Some(val) = node.borrow().val() {
+            match val {
+                Leaf::Return => {
+                    self.return_statement(&node);
+                }
+                _ => {
+                    panic!("未対応のノードです");
+                }
+            }
+        }
+    }
+    
+    fn return_statement(&self, node: &Rc<RefCell<Node>>) {
+    }
+
+    fn add_ret<T: inkwell::values::BasicValue<'ctx>>(&self, value: Option<T>)
+                                                     -> Result<InstructionValue<'ctx>, BuilderError>
+    {
+        match value {
+            Some(v) => self.builder.build_return(Some(&v)),
+            None => self.builder.build_return(None),
+        }
+    }
+
+    fn get_function_body(&self, node: &Rc<RefCell<Node>>) -> Vec<Rc<RefCell<Node>>> {
+        if let Some(val) = node.borrow().val() {
+            if let Leaf::FunctionDefinition(func) = val {
+                return func.body().clone();
+            }
+        }
+
+        panic!("関数の本体が取得できませんでした");
+    }
+
+    fn define_function(&self, function_name: &str, function_type: &ValueType) -> FunctionValue {
+        match function_type {
+            ValueType::Void => self.define_function_void(function_name),
+            ValueType::Int => self.define_function_int(function_name),
+            _ => panic!("未対応の関数型です"),
+        }
+    }
+    fn define_function_void(&self, function_name: &str) -> FunctionValue
+    {
+        let void_type = self.context.void_type();
+        let function_type = void_type.fn_type(&[], false);
+        let function = self.module.add_function(function_name, function_type, None);
+
+
+        // 関数が main の場合は、エントリーポイントを設定
+        if function_name == "main" {
+            let basic_block = self.context.append_basic_block(function, "entry");
+            self.builder.position_at_end(basic_block);
+        }
+
+        function
+    }
+
+    fn define_function_int(&self, function_name: &str) -> FunctionValue
+    {
+        let int_type = self.context.i32_type();
+        let function_type = int_type.fn_type(&[], false);
+        let function = self.module.add_function(function_name, function_type, None);
+
+        // 関数が main の場合は、エントリーポイントを設定
+        if function_name == "main" {
+            let basic_block = self.context.append_basic_block(function, "entry");
+            self.builder.position_at_end(basic_block);
+        }
+
+        function
+    }
+
+
+    fn get_function_name(&self, node: &Rc<RefCell<Node>>) -> String
+    {
+        if let Some(val) = node.borrow().val() {
+            if let Leaf::FunctionDefinition(func) = val {
+                return func.name().clone();
+            }
+        }
+
+        panic!("関数名が取得できませんでした");
+    }
+
+    fn get_function_type(&self, node: &Rc<RefCell<Node>>) -> ValueType
+    {
+        if let Some(val) = node.borrow().val() {
+            if let Leaf::FunctionDefinition(func) = val {
+                return func.type_specifier().clone();
+            }
+        }
+
+        panic!("関数の型が取得できませませんでした");
     }
 
     /// ValueType に応じた LLVM 型を返す
@@ -121,23 +249,26 @@ impl<'ctx> CodeGen<'ctx>
         };
 
         // LLVM IR でグローバル変数を定義
+        self.define_global_variable(value_type, &identifier, value);
+    }
+
+    fn define_global_variable(&mut self,
+                              value_type: ValueType,
+                              identifier: &str,
+                              value: VariableValue) {
         match value_type {
-            ValueType::Int =>
-                {
-                    match value
-                    {
-                        VariableValue::Int(value) => self.add_global_int(&identifier, value),
-                        VariableValue::Float(value) => self.add_global_int(&identifier, value as i32),
-                    }
+            ValueType::Int => {
+                match value {
+                    VariableValue::Int(value) => self.add_global_int(identifier, value),
+                    VariableValue::Float(value) => self.add_global_int(identifier, value as i32),
                 }
-            ValueType::Float =>
-                {
-                    match value
-                    {
-                        VariableValue::Int(value) => self.add_global_float(&identifier, value as f32),
-                        VariableValue::Float(value) => self.add_global_float(&identifier, value),
-                    }
+            }
+            ValueType::Float => {
+                match value {
+                    VariableValue::Int(value) => self.add_global_float(identifier, value as f32),
+                    VariableValue::Float(value) => self.add_global_float(identifier, value),
                 }
+            }
             _ => panic!("未対応の型です"),
         }
     }
@@ -168,7 +299,7 @@ impl<'ctx> CodeGen<'ctx>
         let global = self.module.add_global(float_type, None, name);
         let const_value = float_type.const_float(value as f64);
         global.set_initializer(&const_value);
-        
+
         let global_var =
             GlobalVariable::new(name.to_string(), VariableValue::Float(value), global);
         self.global_vars.insert(name.to_string(), global_var);

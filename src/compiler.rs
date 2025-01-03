@@ -63,6 +63,8 @@ impl<'ctx> CodeGen<'ctx> {
         // main を終了
         self.builder.build_return(None);
     }
+    
+    
 }
 
 fn easy_compiler() -> Result<(), Box<dyn Error>>
@@ -83,7 +85,7 @@ fn easy_compiler() -> Result<(), Box<dyn Error>>
     codegen.add_main_function(hello_world_func);
 
     // ビットコードをファイルに保存
-    let path = Path::new("output.bc");
+    let path = Path::new("hello_world.bc");
     codegen
         .module
         .write_bitcode_to_path(path);
@@ -136,5 +138,7 @@ int main()
     let roots = parser.roots();
     compile(roots)?;
 
+    easy_compiler()?;
+    
     Ok(())
 }

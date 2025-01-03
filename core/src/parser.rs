@@ -108,6 +108,10 @@ impl FunctionDefinition {
     pub fn arguments(&self) -> &Vec<Argument> {
         &self.arguments
     }
+    
+    pub fn type_specifier(&self) -> &ValueType {
+        &self.type_specifier
+    }
 
     pub fn set_type_specifier(&mut self, type_specifier: ValueType) {
         self.type_specifier = type_specifier;
