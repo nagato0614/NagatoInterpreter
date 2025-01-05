@@ -108,7 +108,7 @@ impl FunctionDefinition {
     pub fn arguments(&self) -> &Vec<Argument> {
         &self.arguments
     }
-    
+
     pub fn type_specifier(&self) -> &ValueType {
         &self.type_specifier
     }
@@ -795,7 +795,7 @@ impl Parser
 
         let identifier = self.tokens[self.token_index].clone();
         let next_token = self.tokens[self.token_index + 1].clone();
-        
+
         // next_token が '=' なら assignment として処理する
         match next_token
         {
@@ -810,7 +810,7 @@ impl Parser
                 root = self.logical_or_expression(&root).unwrap();
             }
         }
-        
+
         root
     }
 
@@ -865,7 +865,7 @@ impl Parser
         } else {
             panic!("識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
         }
-        
+
         // '[' が来ることを確認
         if let Some(Token::LeftBracket) = self.get_next_token()
         {
@@ -873,7 +873,7 @@ impl Parser
         } else {
             panic!("'[' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
         }
-        
+
         // アクセスするindex (添字) を取得
         if let Some(index) = self.logical_or_expression(&root)
         {
@@ -881,7 +881,7 @@ impl Parser
         } else {
             panic!("添字が見つかりませんでした : {:?}", self.tokens[self.token_index]);
         }
-        
+
         // ']' が来ることを確認
         if let Some(Token::RightBracket) = self.get_next_token()
         {
@@ -889,7 +889,7 @@ impl Parser
         } else {
             panic!("']' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
         }
-        
+
         // 次のトークンが '=' かどうか
         if let Some(next_token) = self.get_next_token()
         {
@@ -909,7 +909,7 @@ impl Parser
         } else {
             panic!("トークンがありません");
         }
-        
+
 
         root
     }
@@ -1502,3 +1502,1146 @@ impl Parser
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lexical::{Token, ValueType};
+    use crate::tree_viewer::TreeViewer;
+
+    #[test]
+    fn test_empty_function() {
+        // int main() {}
+        let tokens = vec![
+            Token::Type(ValueType::Int),          // int
+            Token::Identifier("main".to_string()), // main
+            Token::LeftParen,                     // (
+            Token::RightParen,                    // )
+            Token::LeftBrace,                     // {
+            Token::RightBrace,                    // }
+        ];
+        let answer = String::from(
+            "digraph {\n    0 [ label = \"\\\"0: Function Definition [main]\\\"\" ]\n}\n");
+        // 改行と空白を削除
+        let answer = answer.replace(" ", "").replace("\n", "");
+
+
+        let mut parser = Parser::new(tokens);
+        parser.parse();
+
+        let mut tree_viewer = TreeViewer::new();
+        for root in &parser.roots {
+            tree_viewer.make_tree(root);
+        }
+
+        let result = tree_viewer.get_dot().replace(" ", "").replace("\n", "");
+
+        assert_eq!(result, answer);
+    }
+
+    #[test]
+    fn test_global_var_and_return() {
+        // int globalVar = 10; 
+        // int main() 
+        // { 
+        //      return globalVar; 
+        // }
+        let tokens = vec![
+            Token::Type(ValueType::Int),
+            Token::Identifier("globalVar".to_string()),
+            Token::Assign,
+            Token::Constant(Constant::Integer(10)),
+            Token::Semicolon,
+            Token::Type(ValueType::Int),
+            Token::Identifier("main".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Return,
+            Token::Identifier("globalVar".to_string()),
+            Token::Semicolon,
+            Token::RightBrace,
+        ];
+        let answer = String::from("digraph{0[label=\"\\\"0:Declaration(Int)\\\"\"]1[label=\"\\\"1:Identifier(\\\\\\\"globalVar\\\\\\\")\\\"\"]2[label=\"\\\"2:Constant(Integer(10))\\\"\"]3[label=\"\\\"3:FunctionDefinition[main]\\\"\"]4[label=\"\\\"4:Return\\\"\"]5[label=\"\\\"5:Identifier(\\\\\\\"globalVar\\\\\\\")\\\"\"]0->1[]0->2[]4->5[]3->4[]}");
+        // 改行と空白を削除
+        let answer = answer.replace(" ", "").replace("\n", "");
+
+        let mut parser = Parser::new(tokens);
+        parser.parse();
+
+        let mut tree_viewer = TreeViewer::new();
+        for root in &parser.roots {
+            tree_viewer.make_tree(root);
+        }
+
+
+        let result = tree_viewer.get_dot().replace(" ", "").replace("\n", "");
+
+        assert_eq!(result, answer);
+    }
+
+    #[test]
+    fn test_function_definition_with_two_args() {
+        // int add(int a, int b) 
+        // { 
+        //     return a + b; 
+        // } 
+        // int main() 
+        // {
+        //     int result = add(1, 2);
+        //     return result; 
+        // }
+        let tokens = vec![
+            Token::Type(ValueType::Int),
+            Token::Identifier("add".to_string()),
+            Token::LeftParen,
+            Token::Type(ValueType::Int),
+            Token::Identifier("a".to_string()),
+            Token::Comma,
+            Token::Type(ValueType::Int),
+            Token::Identifier("b".to_string()),
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Return,
+            Token::Identifier("a".to_string()),
+            Token::Operator(Operator::Plus),
+            Token::Identifier("b".to_string()),
+            Token::Semicolon,
+            Token::RightBrace,
+            Token::Type(ValueType::Int),
+            Token::Identifier("main".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Type(ValueType::Int),
+            Token::Identifier("result".to_string()),
+            Token::Assign,
+            Token::Identifier("add".to_string()),
+            Token::LeftParen,
+            Token::Constant(Constant::Integer(1)),
+            Token::Comma,
+            Token::Constant(Constant::Integer(2)),
+            Token::RightParen,
+            Token::Semicolon,
+            Token::Return,
+            Token::Identifier("result".to_string()),
+            Token::Semicolon,
+            Token::RightBrace,
+        ];
+
+        let answer = String::from("digraph{0[label=\"\\\"0:FunctionDefinition[add]\\\"\"]1[label=\"\\\"1:Return\\\"\"]2[label=\"\\\"2:Operator(Plus)\\\"\"]3[label=\"\\\"3:Identifier(\\\\\\\"a\\\\\\\")\\\"\"]4[label=\"\\\"4:Identifier(\\\\\\\"b\\\\\\\")\\\"\"]5[label=\"\\\"5:FunctionDefinition[main]\\\"\"]6[label=\"\\\"6:Declaration(Int)\\\"\"]7[label=\"\\\"7:Identifier(\\\\\\\"result\\\\\\\")\\\"\"]8[label=\"\\\"8:FunctionCall[add]\\\"\"]9[label=\"\\\"9:Constant(Integer(1))\\\"\"]10[label=\"\\\"10:Constant(Integer(2))\\\"\"]11[label=\"\\\"11:Return\\\"\"]12[label=\"\\\"12:Identifier(\\\\\\\"result\\\\\\\")\\\"\"]2->3[]2->4[]1->2[]0->1[]6->7[]8->9[]8->10[]6->8[]5->6[]11->12[]5->11[]}");
+        // 改行と空白を削除
+        let answer = answer.replace(" ", "").replace("\n", "");
+
+        let mut parser = Parser::new(tokens);
+        parser.parse();
+
+        let mut tree_viewer = TreeViewer::new();
+        for root in &parser.roots {
+            tree_viewer.make_tree(root);
+        }
+
+        let result = tree_viewer.get_dot().replace(" ", "").replace("\n", "");
+
+        assert_eq!(result, answer);
+    }
+
+    #[test]
+    fn test_if_statement_block() {
+        // int main() 
+        // { 
+        //      int x = 0; 
+        //      if (x == 0) 
+        //      { 
+        //          x = 1; 
+        //      } 
+        // }
+        let tokens = vec![
+            Token::Type(ValueType::Int),
+            Token::Identifier("main".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Type(ValueType::Int),
+            Token::Identifier("x".to_string()),
+            Token::Assign,
+            Token::Constant(Constant::Integer(0)),
+            Token::Semicolon,
+            Token::If,
+            Token::LeftParen,
+            Token::Identifier("x".to_string()),
+            Token::Operator(Operator::Equal),
+            Token::Constant(Constant::Integer(0)),
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Identifier("x".to_string()),
+            Token::Assign,
+            Token::Constant(Constant::Integer(1)),
+            Token::Semicolon,
+            Token::RightBrace,
+            Token::RightBrace,
+        ];
+
+        let answer = String::from("digraph{0[label=\"\\\"0:FunctionDefinition[main]\\\"\"]1[label=\"\\\"1:Declaration(Int)\\\"\"]2[label=\"\\\"2:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]3[label=\"\\\"3:Constant(Integer(0))\\\"\"]4[label=\"\\\"4:IfStatement\\\"\"]5[label=\"\\\"5:BlockItem\\\"\"]6[label=\"\\\"6:Assignment\\\"\"]7[label=\"\\\"7:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]8[label=\"\\\"8:Constant(Integer(1))\\\"\"]1->2[]1->3[]0->1[]6->7[]6->8[]5->6[]4->5[]0->4[]}");
+        // 改行と空白を削除
+        let answer = answer.replace(" ", "").replace("\n", "");
+
+        let mut parser = Parser::new(tokens);
+        parser.parse();
+
+        let mut tree_viewer = TreeViewer::new();
+        for root in &parser.roots {
+            tree_viewer.make_tree(root);
+        }
+
+        let result = tree_viewer.get_dot().replace(" ", "").replace("\n", "");
+
+        assert_eq!(result, answer);
+    }
+
+    #[test]
+    fn test_if_else_statement() {
+        // int main() 
+        // { 
+        //      int x = 0; 
+        //      if (x == 0) 
+        //      { 
+        //          x = 1; 
+        //      } 
+        //      else 
+        //      { 
+        //          x = 2; 
+        //      } 
+        //      return x; 
+        // }
+        let tokens = vec![
+            Token::Type(ValueType::Int),
+            Token::Identifier("main".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Type(ValueType::Int),
+            Token::Identifier("x".to_string()),
+            Token::Assign,
+            Token::Constant(Constant::Integer(0)),
+            Token::Semicolon,
+            Token::If,
+            Token::LeftParen,
+            Token::Identifier("x".to_string()),
+            Token::Operator(Operator::Equal),
+            Token::Constant(Constant::Integer(0)),
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Identifier("x".to_string()),
+            Token::Assign,
+            Token::Constant(Constant::Integer(1)),
+            Token::Semicolon,
+            Token::RightBrace,
+            Token::Else,
+            Token::LeftBrace,
+            Token::Identifier("x".to_string()),
+            Token::Assign,
+            Token::Constant(Constant::Integer(2)),
+            Token::Semicolon,
+            Token::RightBrace,
+            Token::Return,
+            Token::Identifier("x".to_string()),
+            Token::Semicolon,
+            Token::RightBrace,
+        ];
+
+        let answer = String::from("digraph{0[label=\"\\\"0:FunctionDefinition[main]\\\"\"]1[label=\"\\\"1:Declaration(Int)\\\"\"]2[label=\"\\\"2:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]3[label=\"\\\"3:Constant(Integer(0))\\\"\"]4[label=\"\\\"4:IfStatement\\\"\"]5[label=\"\\\"5:BlockItem\\\"\"]6[label=\"\\\"6:Assignment\\\"\"]7[label=\"\\\"7:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]8[label=\"\\\"8:Constant(Integer(1))\\\"\"]9[label=\"\\\"9:BlockItem\\\"\"]10[label=\"\\\"10:Assignment\\\"\"]11[label=\"\\\"11:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]12[label=\"\\\"12:Constant(Integer(2))\\\"\"]13[label=\"\\\"13:Return\\\"\"]14[label=\"\\\"14:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]1->2[]1->3[]0->1[]6->7[]6->8[]5->6[]4->5[]10->11[]10->12[]9->10[]4->9[]0->4[]13->14[]0->13[]}");
+        // 改行と空白を削除
+        let answer = answer.replace(" ", "").replace("\n", "");
+        let mut parser = Parser::new(tokens);
+        parser.parse();
+
+        let mut tree_viewer = TreeViewer::new();
+        for root in &parser.roots {
+            tree_viewer.make_tree(root);
+        }
+
+        let result = tree_viewer.get_dot().replace(" ", "").replace("\n", "");
+
+        assert_eq!(result, answer);
+    }
+
+    #[test]
+    fn test_for_loop_increment_and_update() {
+        // int main() 
+        // { 
+        //      int i = 0; 
+        //      for (i = 0; i < 10; i = i + 1) 
+        //      { 
+        //          i = i * 2; 
+        //      } 
+        //      return i; 
+        // }
+        let tokens = vec![
+            Token::Type(ValueType::Int),
+            Token::Identifier("main".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Type(ValueType::Int),
+            Token::Identifier("i".to_string()),
+            Token::Assign,
+            Token::Constant(Constant::Integer(0)),
+            Token::Semicolon,
+            Token::For,
+            Token::LeftParen,
+            Token::Identifier("i".to_string()),
+            Token::Assign,
+            Token::Constant(Constant::Integer(0)),
+            Token::Semicolon,
+            Token::Identifier("i".to_string()),
+            Token::Operator(Operator::LessThan),
+            Token::Constant(Constant::Integer(10)),
+            Token::Semicolon,
+            Token::Identifier("i".to_string()),
+            Token::Assign,
+            Token::Identifier("i".to_string()),
+            Token::Operator(Operator::Plus),
+            Token::Constant(Constant::Integer(1)),
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Identifier("i".to_string()),
+            Token::Assign,
+            Token::Identifier("i".to_string()),
+            Token::Operator(Operator::Multiply),
+            Token::Constant(Constant::Integer(2)),
+            Token::Semicolon,
+            Token::RightBrace,
+            Token::Return,
+            Token::Identifier("i".to_string()),
+            Token::Semicolon,
+            Token::RightBrace,
+        ];
+        let answer = String::from("digraph{0[label=\"\\\"0:FunctionDefinition[main]\\\"\"]1[label=\"\\\"1:Declaration(Int)\\\"\"]2[label=\"\\\"2:Identifier(\\\\\\\"i\\\\\\\")\\\"\"]3[label=\"\\\"3:Constant(Integer(0))\\\"\"]4[label=\"\\\"4:ForStatement\\\"\"]5[label=\"\\\"5:Assignment\\\"\"]6[label=\"\\\"6:Identifier(\\\\\\\"i\\\\\\\")\\\"\"]7[label=\"\\\"7:Constant(Integer(0))\\\"\"]8[label=\"\\\"8:Operator(LessThan)\\\"\"]9[label=\"\\\"9:Identifier(\\\\\\\"i\\\\\\\")\\\"\"]10[label=\"\\\"10:Constant(Integer(10))\\\"\"]11[label=\"\\\"11:Assignment\\\"\"]12[label=\"\\\"12:Identifier(\\\\\\\"i\\\\\\\")\\\"\"]13[label=\"\\\"13:Operator(Plus)\\\"\"]14[label=\"\\\"14:Identifier(\\\\\\\"i\\\\\\\")\\\"\"]15[label=\"\\\"15:Constant(Integer(1))\\\"\"]16[label=\"\\\"16:BlockItem\\\"\"]17[label=\"\\\"17:Assignment\\\"\"]18[label=\"\\\"18:Identifier(\\\\\\\"i\\\\\\\")\\\"\"]19[label=\"\\\"19:Operator(Multiply)\\\"\"]20[label=\"\\\"20:Identifier(\\\\\\\"i\\\\\\\")\\\"\"]21[label=\"\\\"21:Constant(Integer(2))\\\"\"]22[label=\"\\\"22:Return\\\"\"]23[label=\"\\\"23:Identifier(\\\\\\\"i\\\\\\\")\\\"\"]1->2[]1->3[]0->1[]5->6[]5->7[]4->5[]8->9[]8->10[]4->8[]11->12[]13->14[]13->15[]11->13[]4->11[]17->18[]19->20[]19->21[]17->19[]16->17[]4->16[]0->4[]22->23[]0->22[]}");
+        // 改行と空白を削除
+        let answer = answer.replace(" ", "").replace("\n", "");
+
+        let mut parser = Parser::new(tokens);
+        parser.parse();
+
+        let mut tree_viewer = TreeViewer::new();
+        for root in &parser.roots {
+            tree_viewer.make_tree(root);
+        }
+
+        let result = tree_viewer.get_dot().replace(" ", "").replace("\n", "");
+
+        assert_eq!(result, answer);
+    }
+
+    #[test]
+    fn test_while_loop_basic() {
+        // int main() 
+        // { 
+        //      int i = 0; 
+        //      while (i < 5) 
+        //      { 
+        //          i = i + 1; 
+        //      } 
+        //      return i; 
+        // }
+        let tokens = vec![
+            Token::Type(ValueType::Int),
+            Token::Identifier("main".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Type(ValueType::Int),
+            Token::Identifier("i".to_string()),
+            Token::Assign,
+            Token::Constant(Constant::Integer(0)),
+            Token::Semicolon,
+            Token::While,
+            Token::LeftParen,
+            Token::Identifier("i".to_string()),
+            Token::Operator(Operator::LessThan),
+            Token::Constant(Constant::Integer(5)),
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Identifier("i".to_string()),
+            Token::Assign,
+            Token::Identifier("i".to_string()),
+            Token::Operator(Operator::Plus),
+            Token::Constant(Constant::Integer(1)),
+            Token::Semicolon,
+            Token::RightBrace,
+            Token::Return,
+            Token::Identifier("i".to_string()),
+            Token::Semicolon,
+            Token::RightBrace,
+        ];
+        let answer = String::from("digraph{0[label=\"\\\"0:FunctionDefinition[main]\\\"\"]1[label=\"\\\"1:Declaration(Int)\\\"\"]2[label=\"\\\"2:Identifier(\\\\\\\"i\\\\\\\")\\\"\"]3[label=\"\\\"3:Constant(Integer(0))\\\"\"]4[label=\"\\\"4:WhileStatement\\\"\"]5[label=\"\\\"5:Operator(LessThan)\\\"\"]6[label=\"\\\"6:Identifier(\\\\\\\"i\\\\\\\")\\\"\"]7[label=\"\\\"7:Constant(Integer(5))\\\"\"]8[label=\"\\\"8:BlockItem\\\"\"]9[label=\"\\\"9:Assignment\\\"\"]10[label=\"\\\"10:Identifier(\\\\\\\"i\\\\\\\")\\\"\"]11[label=\"\\\"11:Operator(Plus)\\\"\"]12[label=\"\\\"12:Identifier(\\\\\\\"i\\\\\\\")\\\"\"]13[label=\"\\\"13:Constant(Integer(1))\\\"\"]14[label=\"\\\"14:Return\\\"\"]15[label=\"\\\"15:Identifier(\\\\\\\"i\\\\\\\")\\\"\"]1->2[]1->3[]0->1[]5->6[]5->7[]4->5[]9->10[]11->12[]11->13[]9->11[]8->9[]4->8[]0->4[]14->15[]0->14[]}");
+        // 改行と空白を削除
+        let answer = answer.replace(" ", "").replace("\n", "");
+
+        let mut parser = Parser::new(tokens);
+        parser.parse();
+
+        let mut tree_viewer = TreeViewer::new();
+        for root in &parser.roots {
+            tree_viewer.make_tree(root);
+        }
+
+        let result = tree_viewer.get_dot().replace(" ", "").replace("\n", "");
+
+        assert_eq!(result, answer);
+    }
+
+    #[test]
+    fn test_while_loop_with_break() {
+        // int main() 
+        // { 
+        //      int i = 0; 
+        //      while (i < 5) 
+        //      { 
+        //          i = i + 1; 
+        //          if (i == 3) 
+        //          { 
+        //              break; 
+        //          } 
+        //      } 
+        //      return i; 
+        // }
+        let tokens = vec![
+            Token::Type(ValueType::Int),
+            Token::Identifier("main".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Type(ValueType::Int),
+            Token::Identifier("i".to_string()),
+            Token::Assign,
+            Token::Constant(Constant::Integer(0)),
+            Token::Semicolon,
+            Token::While,
+            Token::LeftParen,
+            Token::Identifier("i".to_string()),
+            Token::Operator(Operator::LessThan),
+            Token::Constant(Constant::Integer(10)),
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::If,
+            Token::LeftParen,
+            Token::Identifier("i".to_string()),
+            Token::Operator(Operator::Equal),
+            Token::Constant(Constant::Integer(5)),
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Break,
+            Token::Semicolon,
+            Token::RightBrace,
+            Token::Identifier("i".to_string()),
+            Token::Assign,
+            Token::Identifier("i".to_string()),
+            Token::Operator(Operator::Plus),
+            Token::Constant(Constant::Integer(1)),
+            Token::Semicolon,
+            Token::RightBrace,
+            Token::Return,
+            Token::Identifier("i".to_string()),
+            Token::Semicolon,
+            Token::RightBrace,
+        ];
+
+        let answer = String::from("digraph{0[label=\"\\\"0:FunctionDefinition[main]\\\"\"]1[label=\"\\\"1:Declaration(Int)\\\"\"]2[label=\"\\\"2:Identifier(\\\\\\\"i\\\\\\\")\\\"\"]3[label=\"\\\"3:Constant(Integer(0))\\\"\"]4[label=\"\\\"4:WhileStatement\\\"\"]5[label=\"\\\"5:Operator(LessThan)\\\"\"]6[label=\"\\\"6:Identifier(\\\\\\\"i\\\\\\\")\\\"\"]7[label=\"\\\"7:Constant(Integer(10))\\\"\"]8[label=\"\\\"8:BlockItem\\\"\"]9[label=\"\\\"9:IfStatement\\\"\"]10[label=\"\\\"10:BlockItem\\\"\"]11[label=\"\\\"11:Break\\\"\"]12[label=\"\\\"12:Assignment\\\"\"]13[label=\"\\\"13:Identifier(\\\\\\\"i\\\\\\\")\\\"\"]14[label=\"\\\"14:Operator(Plus)\\\"\"]15[label=\"\\\"15:Identifier(\\\\\\\"i\\\\\\\")\\\"\"]16[label=\"\\\"16:Constant(Integer(1))\\\"\"]17[label=\"\\\"17:Return\\\"\"]18[label=\"\\\"18:Identifier(\\\\\\\"i\\\\\\\")\\\"\"]1->2[]1->3[]0->1[]5->6[]5->7[]4->5[]10->11[]9->10[]8->9[]12->13[]14->15[]14->16[]12->14[]8->12[]4->8[]0->4[]17->18[]0->17[]}");
+        // 改行と空白を削除
+        let answer = answer.replace(" ", "").replace("\n", "");
+
+        let mut parser = Parser::new(tokens);
+        parser.parse();
+
+        let mut tree_viewer = TreeViewer::new();
+        for root in &parser.roots {
+            tree_viewer.make_tree(root);
+        }
+
+        let result = tree_viewer.get_dot().replace(" ", "").replace("\n", "");
+
+        assert_eq!(result, answer);
+    }
+
+    #[test]
+    fn test_array_global_definition() {
+        // int arr[10]; 
+        // int main() 
+        // { 
+        //      arr[0] = 123;
+        //      return arr[0]; 
+        // }
+        let tokens = vec![
+            Token::Type(ValueType::Int),
+            Token::Identifier("arr".to_string()),
+            Token::LeftBracket,
+            Token::Constant(Constant::Integer(10)),
+            Token::RightBracket,
+            Token::Semicolon,
+            Token::Type(ValueType::Int),
+            Token::Identifier("main".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Identifier("arr".to_string()),
+            Token::LeftBracket,
+            Token::Constant(Constant::Integer(0)),
+            Token::RightBracket,
+            Token::Assign,
+            Token::Constant(Constant::Integer(123)),
+            Token::Semicolon,
+            Token::Return,
+            Token::Identifier("arr".to_string()),
+            Token::LeftBracket,
+            Token::Constant(Constant::Integer(0)),
+            Token::RightBracket,
+            Token::Semicolon,
+            Token::RightBrace,
+        ];
+
+        let answer = String::from("digraph{0[label=\"\\\"0:Declaration(Int)\\\"\"]1[label=\"\\\"1:Identifier(\\\\\\\"arr\\\\\\\")\\\"\"]2[label=\"\\\"2:Array(10)\\\"\"]3[label=\"\\\"3:FunctionDefinition[main]\\\"\"]4[label=\"\\\"4:ArrayAssignment\\\"\"]5[label=\"\\\"5:Identifier(\\\\\\\"arr\\\\\\\")\\\"\"]6[label=\"\\\"6:Constant(Integer(123))\\\"\"]7[label=\"\\\"7:Return\\\"\"]8[label=\"\\\"8:ArrayAccess\\\"\"]9[label=\"\\\"9:Identifier(\\\\\\\"arr\\\\\\\")\\\"\"]10[label=\"\\\"10:Constant(Integer(0))\\\"\"]0->1[]0->2[]4->5[]4->6[]3->4[]8->9[]8->10[]7->8[]3->7[]}");
+        // 改行と空白を削除
+        let answer = answer.replace(" ", "").replace("\n", "");
+
+        let mut parser = Parser::new(tokens);
+        parser.parse();
+
+        let mut tree_viewer = TreeViewer::new();
+        for root in &parser.roots {
+            tree_viewer.make_tree(root);
+        }
+
+        let result = tree_viewer.get_dot().replace(" ", "").replace("\n", "");
+
+        assert_eq!(result, answer);
+    }
+
+    #[test]
+    fn test_array_local_definition() {
+        // int main() 
+        // { 
+        //      int arr[3]; 
+        //      arr[2] = 5; 
+        //      return arr[2]; 
+        // }
+        let tokens = vec![
+            Token::Type(ValueType::Int),
+            Token::Identifier("main".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Type(ValueType::Int),
+            Token::Identifier("arr".to_string()),
+            Token::LeftBracket,
+            Token::Constant(Constant::Integer(3)),
+            Token::RightBracket,
+            Token::Semicolon,
+            Token::Identifier("arr".to_string()),
+            Token::LeftBracket,
+            Token::Constant(Constant::Integer(2)),
+            Token::RightBracket,
+            Token::Assign,
+            Token::Constant(Constant::Integer(5)),
+            Token::Semicolon,
+            Token::Return,
+            Token::Identifier("arr".to_string()),
+            Token::LeftBracket,
+            Token::Constant(Constant::Integer(2)),
+            Token::RightBracket,
+            Token::Semicolon,
+            Token::RightBrace,
+        ];
+
+        let answer = String::from("digraph{0[label=\"\\\"0:FunctionDefinition[main]\\\"\"]1[label=\"\\\"1:Declaration(Int)\\\"\"]2[label=\"\\\"2:Identifier(\\\\\\\"arr\\\\\\\")\\\"\"]3[label=\"\\\"3:Array(3)\\\"\"]4[label=\"\\\"4:ArrayAssignment\\\"\"]5[label=\"\\\"5:Identifier(\\\\\\\"arr\\\\\\\")\\\"\"]6[label=\"\\\"6:Constant(Integer(5))\\\"\"]7[label=\"\\\"7:Return\\\"\"]8[label=\"\\\"8:ArrayAccess\\\"\"]9[label=\"\\\"9:Identifier(\\\\\\\"arr\\\\\\\")\\\"\"]10[label=\"\\\"10:Constant(Integer(2))\\\"\"]1->2[]1->3[]0->1[]4->5[]4->6[]0->4[]8->9[]8->10[]7->8[]0->7[]}");
+        // 改行と空白を削除
+        let answer = answer.replace(" ", "").replace("\n", "");
+
+        let mut parser = Parser::new(tokens);
+        parser.parse();
+
+        let mut tree_viewer = TreeViewer::new();
+        for root in &parser.roots {
+            tree_viewer.make_tree(root);
+        }
+
+        let result = tree_viewer.get_dot().replace(" ", "").replace("\n", "");
+
+        assert_eq!(result, answer);
+    }
+
+    #[test]
+    fn test_function_call_multiple_args() {
+        // int foo(int x, int y) 
+        // { 
+        //      return x + y; 
+        // } 
+        // int main() 
+        // { 
+        //      return foo(10, 20); 
+        // }
+        let tokens = vec![
+            Token::Type(ValueType::Int),
+            Token::Identifier("foo".to_string()),
+            Token::LeftParen,
+            Token::Type(ValueType::Int),
+            Token::Identifier("x".to_string()),
+            Token::Comma,
+            Token::Type(ValueType::Int),
+            Token::Identifier("y".to_string()),
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Return,
+            Token::Identifier("x".to_string()),
+            Token::Operator(Operator::Plus),
+            Token::Identifier("y".to_string()),
+            Token::Semicolon,
+            Token::RightBrace,
+            Token::Type(ValueType::Int),
+            Token::Identifier("main".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Return,
+            Token::Identifier("foo".to_string()),
+            Token::LeftParen,
+            Token::Constant(Constant::Integer(10)),
+            Token::Comma,
+            Token::Constant(Constant::Integer(20)),
+            Token::RightParen,
+            Token::Semicolon,
+            Token::RightBrace,
+        ];
+
+        let answer = String::from("digraph{0[label=\"\\\"0:FunctionDefinition[foo]\\\"\"]1[label=\"\\\"1:Return\\\"\"]2[label=\"\\\"2:Operator(Plus)\\\"\"]3[label=\"\\\"3:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]4[label=\"\\\"4:Identifier(\\\\\\\"y\\\\\\\")\\\"\"]5[label=\"\\\"5:FunctionDefinition[main]\\\"\"]6[label=\"\\\"6:Return\\\"\"]7[label=\"\\\"7:FunctionCall[foo]\\\"\"]8[label=\"\\\"8:Constant(Integer(10))\\\"\"]9[label=\"\\\"9:Constant(Integer(20))\\\"\"]2->3[]2->4[]1->2[]0->1[]7->8[]7->9[]6->7[]5->6[]}");
+        // 改行と空白を削除
+        let answer = answer.replace(" ", "").replace("\n", "");
+
+        let mut parser = Parser::new(tokens);
+        parser.parse();
+
+        let mut tree_viewer = TreeViewer::new();
+        for root in &parser.roots {
+            tree_viewer.make_tree(root);
+        }
+
+        let result = tree_viewer.get_dot().replace(" ", "").replace("\n", "");
+
+        assert_eq!(result, answer);
+    }
+
+    #[test]
+    fn test_unary_operator_minus() {
+        // int main() 
+        // { 
+        //      int x = 5; 
+        //      x = -x; 
+        //      return x; 
+        // }
+        let tokens = vec![
+            Token::Type(ValueType::Int),
+            Token::Identifier("main".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Type(ValueType::Int),
+            Token::Identifier("x".to_string()),
+            Token::Assign,
+            Token::Constant(Constant::Integer(5)),
+            Token::Semicolon,
+            Token::Identifier("x".to_string()),
+            Token::Assign,
+            Token::UnaryOperator(UnaryOperator::Minus),
+            Token::Identifier("x".to_string()),
+            Token::Semicolon,
+            Token::Return,
+            Token::Identifier("x".to_string()),
+            Token::Semicolon,
+            Token::RightBrace,
+        ];
+
+        let answer = String::from("digraph{0[label=\"\\\"0:FunctionDefinition[main]\\\"\"]1[label=\"\\\"1:Declaration(Int)\\\"\"]2[label=\"\\\"2:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]3[label=\"\\\"3:Constant(Integer(5))\\\"\"]4[label=\"\\\"4:Assignment\\\"\"]5[label=\"\\\"5:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]6[label=\"\\\"6:UnaryExpression(Minus)\\\"\"]7[label=\"\\\"7:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]8[label=\"\\\"8:Return\\\"\"]9[label=\"\\\"9:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]1->2[]1->3[]0->1[]4->5[]6->7[]4->6[]0->4[]8->9[]0->8[]}");
+        // 改行と空白を削除
+        let answer = answer.replace(" ", "").replace("\n", "");
+
+        let mut parser = Parser::new(tokens);
+        parser.parse();
+
+        let mut tree_viewer = TreeViewer::new();
+        for root in &parser.roots {
+            tree_viewer.make_tree(root);
+        }
+
+        let result = tree_viewer.get_dot().replace(" ", "").replace("\n", "");
+
+        assert_eq!(result, answer);
+    }
+
+    #[test]
+    fn test_arithmetic_operations() {
+        // int main() 
+        // { 
+        //      int x = 5; 
+        //      x = x + 1; 
+        //      x = x - 1; 
+        //      x = x * 2; 
+        //      x = x / 2; 
+        //      return x; 
+        // }
+        let tokens = vec![
+            Token::Type(ValueType::Int),
+            Token::Identifier("main".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Type(ValueType::Int),
+            Token::Identifier("x".to_string()),
+            Token::Assign,
+            Token::Constant(Constant::Integer(5)),
+            Token::Semicolon,
+            Token::Type(ValueType::Int),
+            Token::Identifier("y".to_string()),
+            Token::Assign,
+            Token::Constant(Constant::Integer(2)),
+            Token::Semicolon,
+            Token::Identifier("x".to_string()),
+            Token::Assign,
+            Token::Identifier("x".to_string()),
+            Token::Operator(Operator::Plus),
+            Token::Identifier("y".to_string()),
+            Token::Semicolon,
+            Token::Identifier("x".to_string()),
+            Token::Assign,
+            Token::Identifier("x".to_string()),
+            Token::Operator(Operator::Minus),
+            Token::Identifier("y".to_string()),
+            Token::Semicolon,
+            Token::Identifier("x".to_string()),
+            Token::Assign,
+            Token::Identifier("x".to_string()),
+            Token::Operator(Operator::Multiply),
+            Token::Identifier("y".to_string()),
+            Token::Semicolon,
+            Token::Identifier("x".to_string()),
+            Token::Assign,
+            Token::Identifier("x".to_string()),
+            Token::Operator(Operator::Divide),
+            Token::Identifier("y".to_string()),
+            Token::Semicolon,
+            Token::Return,
+            Token::Identifier("x".to_string()),
+            Token::Semicolon,
+            Token::RightBrace,
+        ];
+
+        let answer = String::from("digraph{0[label=\"\\\"0:FunctionDefinition[main]\\\"\"]1[label=\"\\\"1:Declaration(Int)\\\"\"]2[label=\"\\\"2:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]3[label=\"\\\"3:Constant(Integer(5))\\\"\"]4[label=\"\\\"4:Declaration(Int)\\\"\"]5[label=\"\\\"5:Identifier(\\\\\\\"y\\\\\\\")\\\"\"]6[label=\"\\\"6:Constant(Integer(2))\\\"\"]7[label=\"\\\"7:Assignment\\\"\"]8[label=\"\\\"8:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]9[label=\"\\\"9:Operator(Plus)\\\"\"]10[label=\"\\\"10:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]11[label=\"\\\"11:Identifier(\\\\\\\"y\\\\\\\")\\\"\"]12[label=\"\\\"12:Assignment\\\"\"]13[label=\"\\\"13:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]14[label=\"\\\"14:Operator(Minus)\\\"\"]15[label=\"\\\"15:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]16[label=\"\\\"16:Identifier(\\\\\\\"y\\\\\\\")\\\"\"]17[label=\"\\\"17:Assignment\\\"\"]18[label=\"\\\"18:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]19[label=\"\\\"19:Operator(Multiply)\\\"\"]20[label=\"\\\"20:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]21[label=\"\\\"21:Identifier(\\\\\\\"y\\\\\\\")\\\"\"]22[label=\"\\\"22:Assignment\\\"\"]23[label=\"\\\"23:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]24[label=\"\\\"24:Operator(Divide)\\\"\"]25[label=\"\\\"25:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]26[label=\"\\\"26:Identifier(\\\\\\\"y\\\\\\\")\\\"\"]27[label=\"\\\"27:Return\\\"\"]28[label=\"\\\"28:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]1->2[]1->3[]0->1[]4->5[]4->6[]0->4[]7->8[]9->10[]9->11[]7->9[]0->7[]12->13[]14->15[]14->16[]12->14[]0->12[]17->18[]19->20[]19->21[]17->19[]0->17[]22->23[]24->25[]24->26[]22->24[]0->22[]27->28[]0->27[]}");
+        // 改行と空白を削除
+        let answer = answer.replace(" ", "").replace("\n", "");
+
+        let mut parser = Parser::new(tokens);
+        parser.parse();
+
+        let mut tree_viewer = TreeViewer::new();
+        for root in &parser.roots {
+            tree_viewer.make_tree(root);
+        }
+
+        let result = tree_viewer.get_dot().replace(" ", "").replace("\n", "");
+
+        assert_eq!(result, answer);
+    }
+
+    #[test]
+    fn test_logical_and_comparison_operators() {
+        // int main() 
+        // { 
+        //      int x = 5; 
+        //      int y = 2; 
+        //      if (x == 5 && y == 2) 
+        //      { 
+        //          return 1; 
+        //      }
+        //      else 
+        //      { 
+        //          return 0; 
+        //      } 
+        // }
+        let tokens = vec![
+            Token::Type(ValueType::Int),
+            Token::Identifier("main".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Type(ValueType::Int),
+            Token::Identifier("x".to_string()),
+            Token::Assign,
+            Token::Constant(Constant::Integer(5)),
+            Token::Semicolon,
+            Token::Type(ValueType::Int),
+            Token::Identifier("y".to_string()),
+            Token::Assign,
+            Token::Constant(Constant::Integer(2)),
+            Token::Semicolon,
+            Token::If,
+            Token::LeftParen,
+            Token::Identifier("x".to_string()),
+            Token::Operator(Operator::Equal),
+            Token::Constant(Constant::Integer(5)),
+            Token::Operator(Operator::LogicalAnd),
+            Token::Identifier("y".to_string()),
+            Token::Operator(Operator::LessThan),
+            Token::Constant(Constant::Integer(3)),
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Identifier("x".to_string()),
+            Token::Assign,
+            Token::Identifier("x".to_string()),
+            Token::Operator(Operator::Plus),
+            Token::Constant(Constant::Integer(1)),
+            Token::Semicolon,
+            Token::RightBrace,
+            Token::If,
+            Token::LeftParen,
+            Token::Identifier("y".to_string()),
+            Token::Operator(Operator::NotEqual),
+            Token::Constant(Constant::Integer(2)),
+            Token::Operator(Operator::LogicalOr),
+            Token::Identifier("x".to_string()),
+            Token::Operator(Operator::GreaterThan),
+            Token::Constant(Constant::Integer(5)),
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Identifier("x".to_string()),
+            Token::Assign,
+            Token::Identifier("x".to_string()),
+            Token::Operator(Operator::Plus),
+            Token::Constant(Constant::Integer(2)),
+            Token::Semicolon,
+            Token::RightBrace,
+            Token::Return,
+            Token::Identifier("x".to_string()),
+            Token::Semicolon,
+            Token::RightBrace,
+        ];
+
+        let answer = String::from("digraph{0[label=\"\\\"0:FunctionDefinition[main]\\\"\"]1[label=\"\\\"1:Declaration(Int)\\\"\"]2[label=\"\\\"2:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]3[label=\"\\\"3:Constant(Integer(5))\\\"\"]4[label=\"\\\"4:Declaration(Int)\\\"\"]5[label=\"\\\"5:Identifier(\\\\\\\"y\\\\\\\")\\\"\"]6[label=\"\\\"6:Constant(Integer(2))\\\"\"]7[label=\"\\\"7:IfStatement\\\"\"]8[label=\"\\\"8:BlockItem\\\"\"]9[label=\"\\\"9:Assignment\\\"\"]10[label=\"\\\"10:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]11[label=\"\\\"11:Operator(Plus)\\\"\"]12[label=\"\\\"12:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]13[label=\"\\\"13:Constant(Integer(1))\\\"\"]14[label=\"\\\"14:IfStatement\\\"\"]15[label=\"\\\"15:BlockItem\\\"\"]16[label=\"\\\"16:Assignment\\\"\"]17[label=\"\\\"17:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]18[label=\"\\\"18:Operator(Plus)\\\"\"]19[label=\"\\\"19:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]20[label=\"\\\"20:Constant(Integer(2))\\\"\"]21[label=\"\\\"21:Return\\\"\"]22[label=\"\\\"22:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]1->2[]1->3[]0->1[]4->5[]4->6[]0->4[]9->10[]11->12[]11->13[]9->11[]8->9[]7->8[]0->7[]16->17[]18->19[]18->20[]16->18[]15->16[]14->15[]0->14[]21->22[]0->21[]}");
+        // 改行と空白を削除
+        let answer = answer.replace(" ", "").replace("\n", "");
+
+        let mut parser = Parser::new(tokens);
+        parser.parse();
+
+        let mut tree_viewer = TreeViewer::new();
+        for root in &parser.roots {
+            tree_viewer.make_tree(root);
+        }
+
+        let result = tree_viewer.get_dot().replace(" ", "").replace("\n", "");
+
+        assert_eq!(result, answer);
+    }
+
+    #[test]
+    fn test_parenthesized_expression() {
+        // int main() 
+        // { 
+        //      int x = 5; 
+        //      int y = 2; 
+        //      if ((x == 5) && (y == 2))
+        //      { 
+        //          return 1; 
+        //      } 
+        //      else 
+        //      { 
+        //          return 0; 
+        //      } 
+        // }
+        let tokens = vec![
+            Token::Type(ValueType::Int),
+            Token::Identifier("main".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Type(ValueType::Int),
+            Token::Identifier("x".to_string()),
+            Token::Assign,
+            Token::LeftParen,
+            Token::LeftParen,
+            Token::Constant(Constant::Integer(1)),
+            Token::Operator(Operator::Plus),
+            Token::Constant(Constant::Integer(2)),
+            Token::RightParen,
+            Token::Operator(Operator::Multiply),
+            Token::Constant(Constant::Integer(3)),
+            Token::RightParen,
+            Token::Semicolon,
+            Token::Return,
+            Token::Identifier("x".to_string()),
+            Token::Semicolon,
+            Token::RightBrace,
+        ];
+
+        let answer = String::from("digraph{0[label=\"\\\"0:FunctionDefinition[main]\\\"\"]1[label=\"\\\"1:Declaration(Int)\\\"\"]2[label=\"\\\"2:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]3[label=\"\\\"3:ParenthesizedExpression\\\"\"]4[label=\"\\\"4:Operator(Multiply)\\\"\"]5[label=\"\\\"5:ParenthesizedExpression\\\"\"]6[label=\"\\\"6:Operator(Plus)\\\"\"]7[label=\"\\\"7:Constant(Integer(1))\\\"\"]8[label=\"\\\"8:Constant(Integer(2))\\\"\"]9[label=\"\\\"9:Constant(Integer(3))\\\"\"]10[label=\"\\\"10:Return\\\"\"]11[label=\"\\\"11:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]1->2[]6->7[]6->8[]5->6[]4->5[]4->9[]3->4[]1->3[]0->1[]10->11[]0->10[]}");
+        // 改行と空白を削除
+        let answer = answer.replace(" ", "").replace("\n", "");
+
+        let mut parser = Parser::new(tokens);
+        parser.parse();
+
+        let mut tree_viewer = TreeViewer::new();
+        for root in &parser.roots {
+            tree_viewer.make_tree(root);
+        }
+
+        let result = tree_viewer.get_dot().replace(" ", "").replace("\n", "");
+
+        assert_eq!(result, answer);
+    }
+
+    #[test]
+    fn test_multiple_global_and_local_vars() {
+        // int globalA;
+        // int globalB = 10; 
+        // int main() 
+        // { 
+        //      int localA; 
+        //      int localB = 20;
+        //      return globalB + localB; 
+        // }
+        let tokens = vec![
+            Token::Type(ValueType::Int),
+            Token::Identifier("globalA".to_string()),
+            Token::Semicolon,
+            Token::Type(ValueType::Int),
+            Token::Identifier("globalB".to_string()),
+            Token::Assign,
+            Token::Constant(Constant::Integer(10)),
+            Token::Semicolon,
+            Token::Type(ValueType::Int),
+            Token::Identifier("main".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Type(ValueType::Int),
+            Token::Identifier("localA".to_string()),
+            Token::Semicolon,
+            Token::Type(ValueType::Int),
+            Token::Identifier("localB".to_string()),
+            Token::Assign,
+            Token::Constant(Constant::Integer(20)),
+            Token::Semicolon,
+            Token::Return,
+            Token::Identifier("globalB".to_string()),
+            Token::Operator(Operator::Plus),
+            Token::Identifier("localB".to_string()),
+            Token::Semicolon,
+            Token::RightBrace,
+        ];
+
+        let answer = String::from("digraph{0[label=\"\\\"0:Declaration(Int)\\\"\"]1[label=\"\\\"1:Identifier(\\\\\\\"globalA\\\\\\\")\\\"\"]2[label=\"\\\"2:Declaration(Int)\\\"\"]3[label=\"\\\"3:Identifier(\\\\\\\"globalB\\\\\\\")\\\"\"]4[label=\"\\\"4:Constant(Integer(10))\\\"\"]5[label=\"\\\"5:FunctionDefinition[main]\\\"\"]6[label=\"\\\"6:Declaration(Int)\\\"\"]7[label=\"\\\"7:Identifier(\\\\\\\"localA\\\\\\\")\\\"\"]8[label=\"\\\"8:Declaration(Int)\\\"\"]9[label=\"\\\"9:Identifier(\\\\\\\"localB\\\\\\\")\\\"\"]10[label=\"\\\"10:Constant(Integer(20))\\\"\"]11[label=\"\\\"11:Return\\\"\"]12[label=\"\\\"12:Operator(Plus)\\\"\"]13[label=\"\\\"13:Identifier(\\\\\\\"globalB\\\\\\\")\\\"\"]14[label=\"\\\"14:Identifier(\\\\\\\"localB\\\\\\\")\\\"\"]0->1[]2->3[]2->4[]6->7[]5->6[]8->9[]8->10[]5->8[]12->13[]12->14[]11->12[]5->11[]}");
+        // 改行と空白を削除
+        let answer = answer.replace(" ", "").replace("\n", "");
+
+        let mut parser = Parser::new(tokens);
+        parser.parse();
+
+        let mut tree_viewer = TreeViewer::new();
+        for root in &parser.roots {
+            tree_viewer.make_tree(root);
+        }
+
+        let result = tree_viewer.get_dot().replace(" ", "").replace("\n", "");
+
+        assert_eq!(result, answer);
+    }
+
+    #[test] 
+    fn test_return_constant() {
+        // int main() { return 0; }
+        let tokens = vec![
+            Token::Type(ValueType::Int),
+            Token::Identifier("main".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Return,
+            Token::Constant(Constant::Integer(0)),
+            Token::Semicolon,
+            Token::RightBrace,
+        ];
+
+        let answer = String::from("digraph{0[label=\"\\\"0:FunctionDefinition[main]\\\"\"]1[label=\"\\\"1:Return\\\"\"]2[label=\"\\\"2:Constant(Integer(0))\\\"\"]1->2[]0->1[]}");
+        // 改行と空白を削除
+        let answer = answer.replace(" ", "").replace("\n", "");
+
+        let mut parser = Parser::new(tokens);
+        parser.parse();
+
+        let mut tree_viewer = TreeViewer::new();
+        for root in &parser.roots {
+            tree_viewer.make_tree(root);
+        }
+
+        let result = tree_viewer.get_dot().replace(" ", "").replace("\n", "");
+
+        assert_eq!(result, answer);
+    }
+
+    #[test]
+    fn test_array_assignment_expression() {
+        // int main() 
+        // { 
+        //      int x = 0;
+        //      int arr[3]; 
+        //      arr[x + 1] = 100; 
+        //      return arr[1]; 
+        // }
+        let tokens = vec![
+            Token::Type(ValueType::Int),
+            Token::Identifier("main".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Type(ValueType::Int),
+            Token::Identifier("x".to_string()),
+            Token::Assign,
+            Token::Constant(Constant::Integer(0)),
+            Token::Semicolon,
+            Token::Type(ValueType::Int),
+            Token::Identifier("arr".to_string()),
+            Token::LeftBracket,
+            Token::Constant(Constant::Integer(3)),
+            Token::RightBracket,
+            Token::Semicolon,
+            Token::Identifier("arr".to_string()),
+            Token::LeftBracket,
+            Token::Identifier("x".to_string()),
+            Token::Operator(Operator::Plus),
+            Token::Constant(Constant::Integer(1)),
+            Token::RightBracket,
+            Token::Assign,
+            Token::Constant(Constant::Integer(100)),
+            Token::Semicolon,
+            Token::Return,
+            Token::Identifier("arr".to_string()),
+            Token::LeftBracket,
+            Token::Constant(Constant::Integer(1)),
+            Token::RightBracket,
+            Token::Semicolon,
+            Token::RightBrace,
+        ];
+
+        let answer = String::from("digraph{0[label=\"\\\"0:FunctionDefinition[main]\\\"\"]1[label=\"\\\"1:Declaration(Int)\\\"\"]2[label=\"\\\"2:Identifier(\\\\\\\"x\\\\\\\")\\\"\"]3[label=\"\\\"3:Constant(Integer(0))\\\"\"]4[label=\"\\\"4:Declaration(Int)\\\"\"]5[label=\"\\\"5:Identifier(\\\\\\\"arr\\\\\\\")\\\"\"]6[label=\"\\\"6:Array(3)\\\"\"]7[label=\"\\\"7:ArrayAssignment\\\"\"]8[label=\"\\\"8:Identifier(\\\\\\\"arr\\\\\\\")\\\"\"]9[label=\"\\\"9:Constant(Integer(100))\\\"\"]10[label=\"\\\"10:Return\\\"\"]11[label=\"\\\"11:ArrayAccess\\\"\"]12[label=\"\\\"12:Identifier(\\\\\\\"arr\\\\\\\")\\\"\"]13[label=\"\\\"13:Constant(Integer(1))\\\"\"]1->2[]1->3[]0->1[]4->5[]4->6[]0->4[]7->8[]7->9[]0->7[]11->12[]11->13[]10->11[]0->10[]}");
+        // 改行と空白を削除
+        let answer = answer.replace(" ", "").replace("\n", "");
+
+        let mut parser = Parser::new(tokens);
+        parser.parse();
+
+        let mut tree_viewer = TreeViewer::new();
+        for root in &parser.roots {
+            tree_viewer.make_tree(root);
+        }
+
+        let result = tree_viewer.get_dot().replace(" ", "").replace("\n", "");
+
+        assert_eq!(result, answer);
+    }
+
+    #[test]
+    fn test_combined_statements_in_function() {
+        // int main() 
+        // { 
+        //      int a = 1; 
+        //      int b; b = 3; 
+        //      if (a < b) 
+        //      { 
+        //          a = a + b; 
+        //      } 
+        //      for (a = 0; a < 5; a = a + 1)
+        //      { 
+        //          b = b + a; 
+        //      } 
+        //      return a + b; 
+        // }
+        let tokens = vec![
+            Token::Type(ValueType::Int),
+            Token::Identifier("main".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Type(ValueType::Int),
+            Token::Identifier("a".to_string()),
+            Token::Assign,
+            Token::Constant(Constant::Integer(1)),
+            Token::Semicolon,
+            Token::Type(ValueType::Int),
+            Token::Identifier("b".to_string()),
+            Token::Semicolon,
+            Token::Identifier("b".to_string()),
+            Token::Assign,
+            Token::Constant(Constant::Integer(3)),
+            Token::Semicolon,
+            Token::If,
+            Token::LeftParen,
+            Token::Identifier("a".to_string()),
+            Token::Operator(Operator::LessThan),
+            Token::Identifier("b".to_string()),
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Identifier("a".to_string()),
+            Token::Assign,
+            Token::Identifier("a".to_string()),
+            Token::Operator(Operator::Plus),
+            Token::Identifier("b".to_string()),
+            Token::Semicolon,
+            Token::RightBrace,
+            Token::For,
+            Token::LeftParen,
+            Token::Identifier("a".to_string()),
+            Token::Assign,
+            Token::Constant(Constant::Integer(0)),
+            Token::Semicolon,
+            Token::Identifier("a".to_string()),
+            Token::Operator(Operator::LessThan),
+            Token::Constant(Constant::Integer(5)),
+            Token::Semicolon,
+            Token::Identifier("a".to_string()),
+            Token::Assign,
+            Token::Identifier("a".to_string()),
+            Token::Operator(Operator::Plus),
+            Token::Constant(Constant::Integer(1)),
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Identifier("b".to_string()),
+            Token::Assign,
+            Token::Identifier("b".to_string()),
+            Token::Operator(Operator::Plus),
+            Token::Identifier("a".to_string()),
+            Token::Semicolon,
+            Token::RightBrace,
+            Token::Return,
+            Token::Identifier("a".to_string()),
+            Token::Operator(Operator::Plus),
+            Token::Identifier("b".to_string()),
+            Token::Semicolon,
+            Token::RightBrace,
+        ];
+
+        let answer = String::from("digraph{0[label=\"\\\"0:FunctionDefinition[main]\\\"\"]1[label=\"\\\"1:Declaration(Int)\\\"\"]2[label=\"\\\"2:Identifier(\\\\\\\"a\\\\\\\")\\\"\"]3[label=\"\\\"3:Constant(Integer(1))\\\"\"]4[label=\"\\\"4:Declaration(Int)\\\"\"]5[label=\"\\\"5:Identifier(\\\\\\\"b\\\\\\\")\\\"\"]6[label=\"\\\"6:Assignment\\\"\"]7[label=\"\\\"7:Identifier(\\\\\\\"b\\\\\\\")\\\"\"]8[label=\"\\\"8:Constant(Integer(3))\\\"\"]9[label=\"\\\"9:IfStatement\\\"\"]10[label=\"\\\"10:BlockItem\\\"\"]11[label=\"\\\"11:Assignment\\\"\"]12[label=\"\\\"12:Identifier(\\\\\\\"a\\\\\\\")\\\"\"]13[label=\"\\\"13:Operator(Plus)\\\"\"]14[label=\"\\\"14:Identifier(\\\\\\\"a\\\\\\\")\\\"\"]15[label=\"\\\"15:Identifier(\\\\\\\"b\\\\\\\")\\\"\"]16[label=\"\\\"16:ForStatement\\\"\"]17[label=\"\\\"17:Assignment\\\"\"]18[label=\"\\\"18:Identifier(\\\\\\\"a\\\\\\\")\\\"\"]19[label=\"\\\"19:Constant(Integer(0))\\\"\"]20[label=\"\\\"20:Operator(LessThan)\\\"\"]21[label=\"\\\"21:Identifier(\\\\\\\"a\\\\\\\")\\\"\"]22[label=\"\\\"22:Constant(Integer(5))\\\"\"]23[label=\"\\\"23:Assignment\\\"\"]24[label=\"\\\"24:Identifier(\\\\\\\"a\\\\\\\")\\\"\"]25[label=\"\\\"25:Operator(Plus)\\\"\"]26[label=\"\\\"26:Identifier(\\\\\\\"a\\\\\\\")\\\"\"]27[label=\"\\\"27:Constant(Integer(1))\\\"\"]28[label=\"\\\"28:BlockItem\\\"\"]29[label=\"\\\"29:Assignment\\\"\"]30[label=\"\\\"30:Identifier(\\\\\\\"b\\\\\\\")\\\"\"]31[label=\"\\\"31:Operator(Plus)\\\"\"]32[label=\"\\\"32:Identifier(\\\\\\\"b\\\\\\\")\\\"\"]33[label=\"\\\"33:Identifier(\\\\\\\"a\\\\\\\")\\\"\"]34[label=\"\\\"34:Return\\\"\"]35[label=\"\\\"35:Operator(Plus)\\\"\"]36[label=\"\\\"36:Identifier(\\\\\\\"a\\\\\\\")\\\"\"]37[label=\"\\\"37:Identifier(\\\\\\\"b\\\\\\\")\\\"\"]1->2[]1->3[]0->1[]4->5[]0->4[]6->7[]6->8[]0->6[]11->12[]13->14[]13->15[]11->13[]10->11[]9->10[]0->9[]17->18[]17->19[]16->17[]20->21[]20->22[]16->20[]23->24[]25->26[]25->27[]23->25[]16->23[]29->30[]31->32[]31->33[]29->31[]28->29[]16->28[]0->16[]35->36[]35->37[]34->35[]0->34[]}");
+        // 改行と空白を削除
+        let answer = answer.replace(" ", "").replace("\n", "");
+
+        let mut parser = Parser::new(tokens);
+        parser.parse();
+
+        let mut tree_viewer = TreeViewer::new();
+        for root in &parser.roots {
+            tree_viewer.make_tree(root);
+        }
+
+        let result = tree_viewer.get_dot().replace(" ", "").replace("\n", "");
+
+        assert_eq!(result, answer);
+    }
+}
