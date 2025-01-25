@@ -63,8 +63,6 @@ impl<'ctx> CodeGen<'ctx> {
         // main を終了
         self.builder.build_return(None);
     }
-    
-    
 }
 
 fn easy_compiler() -> Result<(), Box<dyn Error>>
@@ -103,12 +101,15 @@ fn easy_compiler() -> Result<(), Box<dyn Error>>
 
 fn main() -> Result<(), Box<dyn Error>> {
     let program = String::from("
-int a = 0;
-int b = 1;
+int add(int x, int y) {
+    int z = x + y;
+    return z;
+}
 
 int main()
 {
-    return 0;
+    int a = add(1, 2);
+    return 1;
 }
     ");
 
@@ -138,7 +139,5 @@ int main()
     let roots = parser.roots();
     compile(roots)?;
 
-    easy_compiler()?;
-    
     Ok(())
 }

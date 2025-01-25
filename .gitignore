@@ -93,5 +93,6 @@ fabric.properties
 target
 *.out
 *.dot
+log.txt
 line.txt
 output*

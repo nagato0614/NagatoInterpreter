@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use inkwell::builder::{Builder, BuilderError};
 use inkwell::context::Context;
 use inkwell::module::Module;
-use inkwell::values::{FunctionValue, InstructionValue, PointerValue};
+use inkwell::values::{CallSiteValue, FunctionValue, InstructionValue, PointerValue};
 use inkwell::OptimizationLevel;
 use std::error::Error;
 use std::path::Path;
@@ -30,6 +30,13 @@ struct GlobalVariable<'ctx>
     global_variable: GlobalValue<'ctx>,
 }
 
+#[derive(Debug, Clone)]
+struct LocalVariable<'ctx>
+{
+    name: String,
+    pointer: PointerValue<'ctx>,
+}
+
 impl<'ctx> GlobalVariable<'ctx>
 {
     pub fn new(name: String, value: VariableValue, global_variable: GlobalValue<'ctx>) -> Self {
@@ -50,6 +57,12 @@ struct CodeGen<'ctx> {
 
     // グローバル変数
     global_vars: HashMap<String, GlobalVariable<'ctx>>,
+
+    // ローカル変数
+    local_vars: HashMap<String, PointerValue<'ctx>>,
+
+    // 関数一覧
+    functions: HashMap<String, FunctionValue<'ctx>>,
 }
 
 impl<'ctx> CodeGen<'ctx>
@@ -60,28 +73,39 @@ impl<'ctx> CodeGen<'ctx>
         builder: Builder<'ctx>,
         execution_engine: ExecutionEngine<'ctx>,
     ) -> Self {
-        CodeGen {
+        let codegen = CodeGen {
             context,
             module,
             builder,
             execution_engine,
             global_vars: HashMap::new(),
-        }
+            local_vars: HashMap::new(),
+            functions: HashMap::new(),
+        };
+
+        codegen
     }
 
     // root を読み込んで、LLVM IR を生成する
     pub fn generate(&mut self, root: &Rc<RefCell<Node>>) -> Result<(), Box<dyn Error>> {
+        println!("## generate");
         if let Some(val) = root.borrow().val() {
             match val
             {
                 Leaf::Declaration(_) =>
                     {
-                        self.declare_variable(root);
+                        self.declare_global_variable(root);
                     }
                 Leaf::FunctionDefinition(_) =>
                     {
                         self.function_definition(root);
                     }
+                Leaf::Assignment(_) => {
+                    self.assignment_statement(root);
+                }
+                Leaf::Expression(_) => {
+                    self.expression_statement(root);
+                }
                 _ => {
                     return Err("対応していないノードです".into());
                 }
@@ -94,6 +118,7 @@ impl<'ctx> CodeGen<'ctx>
     }
 
     fn function_definition(&mut self, node: &Rc<RefCell<Node>>) {
+        println!("## function_definition");
         let function_name = self.get_function_name(node);
         let function_type = self.get_function_type(node);
         let function_body = self.get_function_body(node);
@@ -103,6 +128,7 @@ impl<'ctx> CodeGen<'ctx>
 
         // 関数の本体をコンパイル
         if function_body.len() == 0 {
+            // 関数の本体がない場合は、適当な値を返す
             match function_type {
                 ValueType::Void => {
                     // None なので型を指定する必要がないが, 型推論を解決できないため明示的に指定
@@ -111,21 +137,28 @@ impl<'ctx> CodeGen<'ctx>
                 ValueType::Int => {
                     self.add_ret(Some(self.context.i32_type().const_int(0, false)));
                 }
+                ValueType::Float => {
+                    self.add_ret(Some(self.context.f32_type().const_float(0.0)));
+                }
                 _ => panic!("未対応の関数型です"),
             }
         } else {
             for node in function_body {
-                self.compile_node(node);
+                self.compound_statement(&node);
             }
         }
     }
 
-
-    fn compile_node(&mut self, node: Rc<RefCell<Node>>) {
+    fn compound_statement(&mut self, node: &Rc<RefCell<Node>>) {
+        println!("## compound_statement");
+        // compound は関す内部でしか呼ばれないため、ローカル変数のみを扱う
         if let Some(val) = node.borrow().val() {
             match val {
+                Leaf::Declaration(_) => {
+                    self.declare_local_variable(node);
+                }
                 Leaf::Return => {
-                    self.return_statement(&node);
+                    self.return_statement(node);
                 }
                 _ => {
                     panic!("未対応のノードです");
@@ -133,8 +166,49 @@ impl<'ctx> CodeGen<'ctx>
             }
         }
     }
-    
-    fn return_statement(&self, node: &Rc<RefCell<Node>>) {
+
+
+    fn compile_node(&mut self, node: Rc<RefCell<Node>>) {
+        println!("## compile_node");
+
+        if let Some(val) = node.borrow().val() {
+            match val {
+                Leaf::Return => {
+                    self.return_statement(&node);
+                }
+                Leaf::Declaration(_) => {
+                    self.declare_global_variable(&node);
+                }
+                _ => {
+                    panic!("未対応のノードです");
+                }
+            }
+        }
+    }
+
+    fn declare_local_variable(&mut self, node: &Rc<RefCell<Node>>)
+    {
+        println!("## declare_local_variable");
+    }
+
+    /// return 文を処理
+    /// TODO : 戻り値を定数以外取り扱えるようにする
+    fn return_statement(&self, node: &Rc<RefCell<Node>>)
+    {
+        if let Some(constant_value) = self.get_constant_value(node.borrow().lhs().unwrap()) {
+            match constant_value {
+                VariableValue::Int(value) => {
+                    self.add_ret(Some(self.context.i32_type().const_int(value as u64, false)));
+                }
+                VariableValue::Float(value) => {
+                    self.add_ret(Some(self.context.f32_type().const_float(value as f64)));
+                }
+            }
+        } else {
+            // 戻り値がない場合
+            self.add_ret::<inkwell::values::IntValue<'ctx>>(None)
+                .expect("return 文の追加に失敗しました");
+        }
     }
 
     fn add_ret<T: inkwell::values::BasicValue<'ctx>>(&self, value: Option<T>)
@@ -226,7 +300,32 @@ impl<'ctx> CodeGen<'ctx>
         }
     }
 
-    fn declare_variable(&mut self, node: &Rc<RefCell<Node>>) {
+    fn assign_value(&mut self, identifier: String, value: VariableValue)
+    {
+        let variable = self.local_vars.get(&identifier).unwrap();
+
+        match value {
+            VariableValue::Int(value) => {
+                self.builder.build_store(*variable, self.context.i32_type().const_int(value as u64, false));
+            }
+            VariableValue::Float(value) => {
+                self.builder.build_store(*variable, self.context.f32_type().const_float(value as f64));
+            }
+        }
+    }
+
+    fn define_local_variable(&mut self,
+                             value_type: ValueType,
+                             identifier: &str,
+                             value: VariableValue)
+    {
+        println!("## define_local_variable");
+        
+        unimplemented!("define_local_variable");
+    }
+
+    fn declare_global_variable(&mut self, node: &Rc<RefCell<Node>>) {
+        println!("## declare_global_variable");
         let value_type = self.get_variable_type(node);
 
         // 左辺値から識別子を取得
@@ -333,6 +432,32 @@ impl<'ctx> CodeGen<'ctx>
     pub fn write_bitcode(&self, path: &str) {
         self.module.write_bitcode_to_path(Path::new(path));
     }
+
+    // ----------------------------------------------------------------------------------------
+    // デバッグ用関数群
+
+    pub fn define_printf(&mut self)
+    {
+        let i8_ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::from(0));
+        let printf_type = i8_ptr_type.fn_type(&[i8_ptr_type.into()], /* is_var_arg */ true);
+        let printf = self.module.add_function("printf", printf_type, None);
+
+        // 関数を追加
+        self.functions.insert("printf".to_string(), printf);
+    }
+
+    pub fn call_printf(&self, text: &str) -> Result<CallSiteValue<'ctx>, BuilderError>
+    {
+        let printf = self.functions.get("printf").unwrap();
+        let hello_str = self.builder.build_global_string_ptr(text, "hello_str");
+
+        // printf 呼び出し
+        self.builder.build_call(
+            *printf,
+            &[hello_str.expect("REASON").as_pointer_value().into()],
+            "printf_call",
+        )
+    }
 }
 
 
@@ -343,15 +468,17 @@ pub fn compile(roots: &Vec<Rc<RefCell<Node>>>) -> Result<(), Box<dyn Error>> {
     let execution_engine = module.create_jit_execution_engine(OptimizationLevel::None)?;
 
     let mut codegen = CodeGen::new(&context, module, builder, execution_engine);
+    codegen.define_printf();
+
+    println!("## コンパイル開始");
 
     for root in roots {
         codegen.generate(root)?;
     }
 
+
     // 中間コードを標準出力に出力
-    println!("----------------------");
     codegen.module.print_to_stderr();
-    println!("----------------------");
 
     codegen.write_bitcode("output.bc");
 

@@ -29,8 +29,8 @@ impl TreeViewer {
     fn create_graph_node(&mut self, leaf: &Leaf) -> NodeIndex {
         let node_name = match leaf {
             Leaf::Node(node) => format!("{}: {:?}", self.node_index, node.borrow().val().unwrap()),
-            Leaf::FunctionCall(func) => format!("{}: Function Call [{:?}]", self.node_index, func.name()),
-            Leaf::FunctionDefinition(func) => format!("{}: Function Definition [{:?}]", self.node_index, func.name()),
+            Leaf::FunctionCall(func) => format!("{}: Function Call [{}]", self.node_index, func.name()),
+            Leaf::FunctionDefinition(func) => format!("{}: Function Definition [{}]", self.node_index, func.name()),
             Leaf::IfStatement(_) => format!("{}: If Statement", self.node_index),
             Leaf::BlockItem(_) => format!("{}: Block Item", self.node_index),
             Leaf::ForStatement(_) => format!("{}: For Statement", self.node_index),
@@ -51,12 +51,11 @@ impl TreeViewer {
                 let condition = for_stmt.condition();
                 let increment = for_stmt.update();
                 let body = for_stmt.statement();
-                
+
                 self.add_node_and_edge(graph_node, initializer);
                 self.add_node_and_edge(graph_node, condition);
                 self.add_node_and_edge(graph_node, increment);
                 self.add_node_and_edge(graph_node, body);
-                
             }
             _ => {}
         }
@@ -71,13 +70,13 @@ impl TreeViewer {
             }
         }
     }
-    
+
     fn add_node_and_edge(&mut self, parent_node: NodeIndex, node: &Rc<RefCell<Node>>) {
         if let Some(node_index) = self.add_node(node) {
             self.graph.add_edge(parent_node, node_index, String::from(""));
         }
     }
-    
+
     fn add_node(&mut self, node: &Rc<RefCell<Node>>) -> Option<NodeIndex> {
         if let Some(val) = node.borrow().val() {
             println!("val: {:?}", val);
@@ -109,5 +108,9 @@ impl TreeViewer {
         // ファイルに書き込み
         let mut file = File::create(file_name).unwrap();
         file.write_all(dot_output.as_bytes()).unwrap();
+    }
+
+    pub fn get_dot(&self) -> String {
+        format!("{:?}", Dot::with_config(&self.graph, &[Config::EdgeNoLabel]))
     }
 }
