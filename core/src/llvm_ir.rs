@@ -100,15 +100,10 @@ impl<'ctx> CodeGen<'ctx>
                     {
                         self.function_definition(root);
                     }
-                Leaf::Assignment(_) => {
-                    self.assignment_statement(root);
-                }
-                Leaf::Expression(_) => {
-                    self.expression_statement(root);
-                }
-                _ => {
-                    return Err("対応していないノードです".into());
-                }
+                _ =>
+                    {
+                        return Err("対応していないノードです".into());
+                    }
             }
 
             Ok(())
@@ -188,7 +183,7 @@ impl<'ctx> CodeGen<'ctx>
 
     fn declare_local_variable(&mut self, node: &Rc<RefCell<Node>>)
     {
-        println!("## declare_local_variable");
+        
     }
 
     /// return 文を処理
@@ -320,7 +315,7 @@ impl<'ctx> CodeGen<'ctx>
                              value: VariableValue)
     {
         println!("## define_local_variable");
-        
+
         unimplemented!("define_local_variable");
     }
 
