@@ -4,7 +4,7 @@
 cd "$(dirname "$0")/.."
 
 # 古いカバレッジデータを削除
-rm -f *.profraw
+find . -name "*.profraw" -delete
 
 echo "Running tests with coverage instrumentation..."
 RUSTFLAGS="-C instrument-coverage" cargo test --workspace
@@ -15,7 +15,7 @@ grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-existin
 grcov . -s . --binary-path ./target/debug/ -t lcov --branch --ignore-not-existing --ignore "/*" -o ./coverage/lcov.info
 
 # 中間ファイルを削除
-rm *.profraw
+find . -name "*.profraw" -delete
 
 echo "Coverage report generated at coverage/html/index.html"
 echo "LCOV data generated at coverage/lcov.info"
