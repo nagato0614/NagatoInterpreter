@@ -1,12 +1,40 @@
-func average(a, b, c, d) {
-    sum = a + b + c + d;
-    return sum / 4;
+int x = (10 + 20) * 3 - 4 / 2;
+int fib = 0;
+int sum = 0;
+int result[10];
+
+int add(int a, int b) { return a + b; }
+int sub(int a, int b) { return a - b; }
+int fibo(int n) {
+    if (n == 0) {
+        return 0;
+    } else if (n == 1) {
+        return 1;
+    } else {
+        return fibo(n - 1) + fibo(n - 2);
+    }
 }
 
-a = 10;
-b = 15;
-c = 20;
-d = 25;
-result = average(a, b, c, d);
-result;
+int main(void) {
+    int a = 10;
+    int b = 20;
+    a = add(a * 2, (b + 10) / 2);
+    int c = sub(a, b);
+    int d = c + x;
+    fib = fibo(10);
 
+    int count = 0;
+    while (count < 10) {
+        sum = sum + count;
+        count = count + 1;
+    }
+
+    int i;
+    result[0] = 0;
+    result[1] = 1;
+    for (i = 2; i < 10; i = i + 1) {
+        result[i] = result[i - 1] + result[i - 2];
+    }
+
+    return d;
+}

@@ -2,16 +2,20 @@ use core::tree_viewer::TreeViewer;
 use core::lexical::Lexer;
 use core::parser::Parser;
 use core::interpreter::Interpreter;
+use std::env;
+use std::fs;
+use std::process;
 
 fn main() {
-    let program = String::from("
-int globalVar = 10;
+    let args: Vec<String> = env::args().collect();
 
-int main() {
-    return globalVar;
-}
-    ");
+    if args.len() < 2 {
+        println!("Usage: {} <file_path>", args[0]);
+        process::exit(0);
+    }
 
+    let file_path = &args[1];
+    let program = fs::read_to_string(file_path).expect("Failed to read file");
 
     let mut lexer = Lexer::new(program);
     lexer.tokenize();

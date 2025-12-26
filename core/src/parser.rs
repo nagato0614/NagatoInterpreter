@@ -450,17 +450,24 @@ impl Parser
     {
         // 関数の場合は type_specifier, identify, ( となり '(' が続く場合は関数として処理する
 
-        let type_specifier = self.tokens[self.token_index].clone();
-        let identify = self.tokens[self.token_index + 1].clone();
-        let next_token = self.tokens[self.token_index + 2].clone();
+        let token = self.tokens[self.token_index].clone();
+        match token {
+            Token::Type(_) => {
+                let next_token = self.tokens[self.token_index + 2].clone();
 
-        if next_token == Token::LeftParen {
-            println!("function_definition");
-            self.function_definition();
-        } else {
-            println!("declaration : {}", self.token_index);
-            let root = self.declaration();
-            self.roots.push(root);
+                if next_token == Token::LeftParen {
+                    println!("function_definition");
+                    self.function_definition();
+                } else {
+                    println!("declaration : {}", self.token_index);
+                    let root = self.declaration();
+                    self.roots.push(root);
+                }
+            }
+            _ => {
+                let root = self.statement();
+                self.roots.push(root);
+            }
         }
     }
 
@@ -1266,11 +1273,12 @@ impl Parser
         node.borrow_mut().set_parent(parent);
 
         if let Some(left_node) = self.unary_expression(&mut node) {
-            // '*' または '/' の演算子を取得
+            // '*', '/', '%' の演算子を取得
             if let Some(operator) = self.get_next_token_without_increment()
                 .and_then(|token| match token {
                     Token::Operator(Operator::Multiply) => Some(Operator::Multiply),
                     Token::Operator(Operator::Divide) => Some(Operator::Divide),
+                    Token::Operator(Operator::Modulo) => Some(Operator::Modulo),
                     _ => None,
                 })
             {
@@ -1459,6 +1467,9 @@ impl Parser
         {
             match next_token
             {
+                Token::Identifier(identifier) => {
+                    node.borrow_mut().set_val(Leaf::Identifier(identifier));
+                }
                 Token::Constant(constant) => {
                     // 定数の場合
                     node.borrow_mut().set_val(Leaf::Constant(constant));

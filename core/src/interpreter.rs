@@ -161,7 +161,6 @@ impl Interpreter
   {
     if let Some(val) = node.clone().borrow().val()
     {
-      println!("interpret_node val: {}", val);
       match val
       {
         Leaf::Declaration(variable_type) =>

@@ -21,6 +21,10 @@ float y = (x + 1) * 1.5;
 int z = ((x > 15) && (y < 50.0)) || (x == 26);
 int u = ((z != 0) && ((y - 10.0) >= 0.0)) + ((x != y) * 2);
 float v = ((x + z) * (y - 2.0)) + ((u + 3) / 2);
+
+int main() {
+    return v;
+}
 ");
 
         let mut lexer = Lexer::new(input);
