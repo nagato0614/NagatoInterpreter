@@ -44,7 +44,15 @@ int main(void) {
         result[i] = result[i - 1] + result[i - 2];
     }
 
-    return d;
+    struct Point {
+        int x;
+        int y;
+    };
+    struct Point p;
+    p.x = 10;
+    p.y = 20;
+
+    return d + p.x;
 }
 ```
 
@@ -54,7 +62,6 @@ int main(void) {
 
 - 文字列は取り扱わない
 - ポインタは取り扱わない
-- 構造体は取り扱わない
 - マクロオブジェクトのみ取り扱う
 - ヘッダファイルは取り扱わない
 - switch_case文は取り扱わない
@@ -89,6 +96,12 @@ function_definition ::= type_specifier identifier '(' parameter_list ')' compoun
 type_specifier ::= void
                    | int
                    | float
+                   | struct_specifier
+
+struct_specifier ::= struct identifier '{' {struct_declaration}+ '}'
+                     | struct identifier
+
+struct_declaration ::= type_specifier identifier ';'
 
 // ブロック内の処理
 compound_statement ::= '{' {block_item}* '}'
@@ -102,9 +115,9 @@ statement ::= expression_statement ';'
 
 // 変数の初期化
 expression_statement ::= {assignment_expression}? 
-assignment_expression ::= assinment ';'
+assignment_expression ::= assignment ';'
                           | array_assignment ';'
-assignment ::= identifier '=' logical_or_expression
+assignment ::= unary_expression '=' logical_or_expression
 array_assignment ::= identifier '[' logical_or_expression ']' '=' logical_or_expression 
 
 // if文
@@ -152,6 +165,7 @@ postfix_expression ::= primary_expression                               // 単�
                        | identifier                                     // 変数
                        | identifier '(' {logical_or_expression}* {',' logical_or_expression}* ')'    // 関数呼び出し
                        | identifier '[' logical_or_expression ']'         // 配列
+                       | postfix_expression '.' identifier               // 構造体メンバアクセス
 
 primary_expression ::= constant
                        | '(' logical_or_expression ')'

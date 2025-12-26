@@ -62,6 +62,7 @@ pub enum ValueType {
     Void,
     Int,
     Float,
+    Struct(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -79,10 +80,12 @@ pub enum Token {
 
     // 型指定子
     Type(ValueType),                // 型指定子
+    Struct,                         // `struct`
 
     // 区切り記号やその他の構造
     Comma,                     // `,`
     Semicolon,                 // `;`
+    Dot,                       // `.`
     LeftParen,                 // `(`
     RightParen,                // `)`
     LeftBracket,               // `[`
@@ -126,6 +129,7 @@ impl Token
             "continue" => Some(Token::Continue),
             "break" => Some(Token::Break),
             "for" => Some(Token::For),
+            "struct" => Some(Token::Struct),
 
             // 数値の場合
             _ if keyword.parse::<i64>().is_ok() =>
@@ -408,7 +412,15 @@ impl Lexer
                     }
                 '.' =>
                     {
-                        self.add_char(c);
+                        // 数値の一部か、構造体メンバアクセスか判定
+                        // 0..9 の後に . が来た場合は数値の一部とする
+                        // そうでない場合は Token::Dot とする
+                        if self.token_str.chars().last().map_or(false, |c| c.is_ascii_digit()) {
+                            self.add_char(c);
+                        } else {
+                            self.add_token();
+                            self.tokens.push(Token::Dot);
+                        }
                     }
                 ' ' =>
                     {

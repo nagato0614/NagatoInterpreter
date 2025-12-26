@@ -199,6 +199,10 @@ pub enum Leaf
     Assignment,
     ArrayAssignment(Rc<RefCell<Node>>),
 
+    // 構造体
+    StructDefinition(String, Vec<Rc<RefCell<Node>>>), // 名前, メンバ宣言
+    StructMemberAccess,
+
     // jump系の文
     Return,
     Break,
@@ -241,6 +245,8 @@ impl std::fmt::Display for Leaf
             Leaf::ForStatement(_) => write!(f, "ForStatement"),
             Leaf::Array(size) => write!(f, "Array [{:?}]", size),
             Leaf::ArrayAssignment(size) => write!(f, "ArrayAssignment"),
+            Leaf::StructDefinition(name, _) => write!(f, "StructDefinition [{:?}]", name),
+            Leaf::StructMemberAccess => write!(f, "StructMemberAccess"),
         }
     }
 }
@@ -312,6 +318,12 @@ impl Node {
                 }
                 Leaf::Operator(operator) => {
                     println!("Operator [{:?}]", operator);
+                }
+                Leaf::StructDefinition(name, _) => {
+                    println!("StructDefinition [{:?}]", name);
+                }
+                Leaf::StructMemberAccess => {
+                    println!("StructMemberAccess");
                 }
                 Leaf::Constant(constant) => {
                     println!("Constant [{:?}]", constant);
@@ -558,6 +570,9 @@ impl Parser
                 Token::Type(type_specifier) => {
                     root = self.declaration();
                 }
+                Token::Struct => {
+                    root = self.declaration();
+                }
                 _ => {
                     root = self.statement();
                 }
@@ -591,6 +606,9 @@ impl Parser
                 Token::Return => {
                     // jump_statement の場合
                     root = self.jump_statement();
+                }
+                Token::Struct => {
+                    root = self.declaration();
                 }
                 Token::Identifier(identifier) => {
                     // expression_statement の場合
@@ -812,6 +830,10 @@ impl Parser
             Token::LeftBracket => {
                 root = self.array_assignment();
             }
+            Token::Dot => {
+                // 構造体メンバへの代入
+                root = self.assignment();
+            }
             _ => {
                 // それ以外は expression として処理する
                 root = self.logical_or_expression(&root).unwrap();
@@ -826,14 +848,12 @@ impl Parser
         let mut root = Rc::new(RefCell::new(Node::new()));
         root.borrow_mut().set_val(Leaf::Assignment);
 
-        // 左辺に識別子を設定
-        if let Some(Token::Identifier(identifier)) = self.get_next_token()
+        // 左辺をパースする. 構造体メンバアクセスの可能性があるため postfix_expression を使用
+        if let Some(lhs) = self.postfix_expression(&root)
         {
-            let left_node = Rc::new(RefCell::new(Node::new()));
-            left_node.borrow_mut().set_val(Leaf::Identifier(identifier));
-            root.borrow_mut().set_lhs(left_node);
+            root.borrow_mut().set_lhs(lhs);
         } else {
-            panic!("識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+            panic!("左辺が見つかりませんでした : {:?}", self.tokens[self.token_index]);
         }
 
         // 次のトークンが '=' かどうか
@@ -1017,12 +1037,41 @@ impl Parser
         // グローバル変数定義をパースする
         let mut root = Rc::new(RefCell::new(Node::new()));
 
-        // declaration の値として型が入る
-        if let Some(Token::Type(type_specifier)) = self.get_next_token() {
-            root.borrow_mut().set_val(Leaf::Declaration(type_specifier));
-        } else {
-            panic!("型が見つかりませんでした : {:?}", self.tokens[self.token_index]);
-        }
+        // type_specifier を取得
+        let type_specifier = match self.get_next_token() {
+            Some(Token::Type(t)) => t,
+            Some(Token::Struct) => {
+                // struct identifier の形式
+                if let Some(Token::Identifier(struct_name)) = self.get_next_token() {
+                    // 次のトークンが '{' なら構造体定義
+                    if let Some(Token::LeftBrace) = self.get_next_token_without_increment() {
+                        self.token_index_increment();
+                        let mut members = Vec::new();
+                        loop {
+                            if let Some(Token::RightBrace) = self.get_next_token_without_increment() {
+                                self.token_index_increment();
+                                break;
+                            }
+                            members.push(self.declaration());
+                        }
+                        // ';' が来ることを確認
+                        if let Some(Token::Semicolon) = self.get_next_token_without_increment() {
+                            self.token_index_increment();
+                        }
+                        root.borrow_mut().set_val(Leaf::StructDefinition(struct_name, members));
+                        return root;
+                    } else {
+                        // 構造体型の変数宣言
+                        ValueType::Struct(struct_name)
+                    }
+                } else {
+                    panic!("構造体名が見つかりませんでした");
+                }
+            }
+            _ => panic!("型が見つかりませんでした : {:?}", self.tokens[self.token_index]),
+        };
+
+        root.borrow_mut().set_val(Leaf::Declaration(type_specifier));
 
         // declaration の左辺として識別子が入る
         if let Some(Token::Identifier(identifier)) = self.get_next_token() {
@@ -1419,6 +1468,27 @@ impl Parser
                                     } else {
                                         panic!("']' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
                                     }
+                                }
+                            }
+                            Token::Dot => {
+                                // 構造体メンバアクセスの場合
+                                node.borrow_mut().set_val(Leaf::StructMemberAccess);
+
+                                // 左側に postfix_expression (今回は簡単のため識別子のみをサポートするが、本来は再帰的)
+                                let left_node = Rc::new(RefCell::new(Node::new()));
+                                left_node.borrow_mut().set_val(Leaf::Identifier(identify));
+                                node.borrow_mut().set_lhs(left_node);
+
+                                // '.' を進める
+                                self.token_index_increment();
+
+                                // メンバ名を取得
+                                if let Some(Token::Identifier(member_name)) = self.get_next_token() {
+                                    let right_node = Rc::new(RefCell::new(Node::new()));
+                                    right_node.borrow_mut().set_val(Leaf::Identifier(member_name));
+                                    node.borrow_mut().set_rhs(right_node);
+                                } else {
+                                    panic!("メンバ名が見つかりませんでした");
                                 }
                             }
                             _ => {

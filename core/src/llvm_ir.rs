@@ -292,6 +292,9 @@ impl<'ctx> CodeGen<'ctx>
             ValueType::Void => self.context.void_type().as_any_type_enum(),
             ValueType::Int => self.context.i32_type().as_any_type_enum(),
             ValueType::Float => self.context.f32_type().as_any_type_enum(),
+            ValueType::Struct(_) => {
+                panic!("LLVM IR では構造体は未対応です");
+            }
         }
     }
 

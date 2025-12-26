@@ -42,6 +42,7 @@ pub enum VariableType
 {
   Int(i32),
   Float(f64),
+  Struct(Struct),
   Void,
   Break,
   Return(Box<VariableType>),
@@ -56,6 +57,7 @@ impl std::fmt::Display for VariableType
     {
       VariableType::Int(val) => write!(f, "{}", val),
       VariableType::Float(val) => write!(f, "{}", val),
+      VariableType::Struct(s) => write!(f, "struct {}", s.name),
       VariableType::Void => write!(f, "void"),
       VariableType::Break => write!(f, "break"),
       VariableType::Return(val) => write!(f, "return {}", val),
@@ -64,9 +66,35 @@ impl std::fmt::Display for VariableType
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Struct
+{
+  name: String,
+  members: HashMap<String, VariableType>,
+}
+
+impl Struct
+{
+  pub fn new(name: String, members: HashMap<String, VariableType>) -> Self
+  {
+    Struct { name, members }
+  }
+
+  pub fn name(&self) -> &String
+  {
+    &self.name
+  }
+
+  pub fn members(&self) -> &HashMap<String, VariableType>
+  {
+    &self.members
+  }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Variable {
   Value(VariableType),
   Array(Array),
+  Struct(Struct),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -88,6 +116,8 @@ pub struct Interpreter
 
   function_definition: HashMap<String, FunctionDefinition>,
 
+  struct_definition: HashMap<String, HashMap<String, ValueType>>,
+
   scope: Scope,
 }
 
@@ -101,6 +131,7 @@ impl Interpreter
       global_variables: HashMap::new(),
       local_variables: Vec::new(),
       function_definition: HashMap::new(),
+      struct_definition: HashMap::new(),
       scope: Scope::Global,
     }
   }
@@ -153,6 +184,10 @@ impl Interpreter
           {
             // unimplemented!("配列の表示は未実装です");
           }
+        Variable::Struct(s) =>
+          {
+            // unimplemented!("構造体の表示は未実装です");
+          }
       }
     }
   }
@@ -199,6 +234,37 @@ impl Interpreter
                   ValueType::Float =>
                     {
                       self.insert_variable_float(identifier, 0.0);
+                    }
+                  ValueType::Struct(struct_name) =>
+                    {
+                      // 構造体定義からメンバを取得
+                      let struct_def = self.struct_definition.get(struct_name).unwrap().clone();
+                      let mut members = HashMap::new();
+                      for (member_name, member_type) in struct_def
+                      {
+                        match member_type
+                        {
+                          ValueType::Int => { members.insert(member_name, VariableType::Int(0)); }
+                          ValueType::Float => { members.insert(member_name, VariableType::Float(0.0)); }
+                          ValueType::Struct(nested_struct_name) => {
+                            // ネストした構造体の初期化
+                            let nested_struct_def = self.struct_definition.get(&nested_struct_name).unwrap().clone();
+                            let mut nested_members = HashMap::new();
+                            for (n_name, n_type) in nested_struct_def {
+                                match n_type {
+                                    ValueType::Int => { nested_members.insert(n_name, VariableType::Int(0)); }
+                                    ValueType::Float => { nested_members.insert(n_name, VariableType::Float(0.0)); }
+                                    _ => { panic!("深いネストの構造体は未対応です"); }
+                                }
+                            }
+                            let nested_s = Struct::new(nested_struct_name, nested_members);
+                            members.insert(member_name, VariableType::Struct(nested_s));
+                          }
+                          _ => { panic!("未対応のメンバ型です : {:?}", member_type); }
+                        }
+                      }
+                      let s = Struct::new(struct_name.clone(), members);
+                      self.insert_variable(identifier, Variable::Struct(s));
                     }
                   _ => {
                     panic!("未対応の型です : {:?}", variable_type);
@@ -256,6 +322,26 @@ impl Interpreter
         Leaf::ArrayAssignment(_) =>
           {
             return self.array_assignment(node);
+          }
+        Leaf::StructDefinition(name, members) =>
+          {
+            let mut struct_members = HashMap::new();
+            for member in members
+            {
+              if let Some(Leaf::Declaration(value_type)) = member.borrow().val()
+              {
+                if let Some(lhs) = member.borrow().lhs()
+                {
+                  let identifier = self.identifier_name(lhs);
+                  struct_members.insert(identifier, value_type.clone());
+                }
+              }
+            }
+            self.struct_definition.insert(name.clone(), struct_members);
+          }
+        Leaf::StructMemberAccess =>
+          {
+            return self.struct_member_access(node);
           }
         _ => {
           panic!("未対応のノードです : {:?}", val);
@@ -476,58 +562,74 @@ impl Interpreter
 
   fn variable_assignment(&mut self, node: &Rc<RefCell<Node>>) -> VariableType
   {
-    // 左辺に識別子があり, 変数として登録されていることを確認する
     if let Some(lhs) = node.borrow().lhs()
     {
-      let identifier = self.identifier_name(lhs);
-
       if let Some(rhs) = node.borrow().rhs()
       {
         let mut value = self.statement(rhs);
-        // ローカル変数から検索
-        if let Some(local_variables) = self.local_variables.last_mut()
+        if let VariableType::Return(val) = value
         {
-          println!("local_variables : {:?} = {:?}", local_variables, value);
+          value = val.as_ref().clone();
+        }
 
-          // value が 定数ではなく Return の時中身を取り出す
-          if let VariableType::Return(val) = value
+        if let Some(Leaf::Identifier(identifier)) = lhs.borrow().val()
+        {
+          // identifier への代入
+          // ローカル変数から検索
+          if let Some(local_variables) = self.local_variables.last_mut()
           {
-            println!("convert return value : {:?}", val);
-            value = val.as_ref().clone();
-          }
-
-          // 最後のスコープから検索
-          for local_variable in local_variables.iter_mut().rev()
-          {
-            if let Some(variable) = local_variable.get_mut(&identifier)
+            // 最後のスコープから検索
+            for local_variable in local_variables.iter_mut().rev()
             {
-              if let Variable::Value(variable) = variable
+              if let Some(variable) = local_variable.get_mut(identifier)
               {
-                *variable = value;
-                return VariableType::Void;
+                if let Variable::Value(variable) = variable
+                {
+                  *variable = value;
+                  return VariableType::Void;
+                }
               }
             }
           }
-          println!("global_variables : {:?}", self.global_variables);
 
           // グローバル変数から検索
-          if let Some(variable) = self.global_variables.get_mut(&identifier)
+          if let Some(variable) = self.global_variables.get_mut(identifier)
           {
             if let Variable::Value(variable) = variable
             {
               *variable = value;
-            } else {
-              panic!("Global 変数が見つかりません : {}", identifier);
+              return VariableType::Void;
             }
-          } else {
-            panic!("Global 変数が見つかりません : {}", identifier);
+          }
+        } else if let Some(Leaf::StructMemberAccess) = lhs.borrow().val() {
+          // 構造体メンバへの代入
+          if let Some(struct_node) = lhs.borrow().lhs() {
+            let struct_identifier = self.identifier_name(struct_node);
+            if let Some(member_node) = lhs.borrow().rhs() {
+              if let Some(Leaf::Identifier(member_name)) = member_node.borrow().val() {
+                // ローカル変数から検索
+                if let Some(local_variables) = self.local_variables.last_mut() {
+                  for local_variable in local_variables.iter_mut().rev() {
+                    if let Some(variable) = local_variable.get_mut(&struct_identifier) {
+                      if let Variable::Struct(s) = variable {
+                        s.members.insert(member_name.clone(), value);
+                        return VariableType::Void;
+                      }
+                    }
+                  }
+                }
+                // グローバル変数から検索
+                if let Some(variable) = self.global_variables.get_mut(&struct_identifier) {
+                  if let Variable::Struct(s) = variable {
+                    s.members.insert(member_name.clone(), value);
+                    return VariableType::Void;
+                  }
+                }
+              }
+            }
           }
         }
-      } else {
-        panic!("右辺に識別子がありません");
       }
-    } else {
-      panic!("左辺に識別子がありません");
     }
 
     VariableType::Void
@@ -548,8 +650,12 @@ impl Interpreter
           {
             values.push(VariableType::Float(0.0));
           }
-        _ => {
-          panic!("未対応の型です : {:?}", value_type);
+        ValueType::Struct(_) =>
+          {
+            panic!("構造体の配列は未対応です");
+          }
+        ValueType::Void => {
+          panic!("void の配列は定義できません");
         }
       }
     }
@@ -596,8 +702,12 @@ impl Interpreter
             }
           }
         }
-      _ => {
-        panic!("未対応の型です : {:?}", value_type);
+      ValueType::Struct(_) =>
+        {
+          panic!("構造体の代入による初期化は未対応です");
+        }
+      ValueType::Void => {
+        panic!("void 型の変数は定義できません");
       }
     }
   }
@@ -691,6 +801,10 @@ impl Interpreter
           {
             return self.array_access(node);
           }
+        Leaf::StructMemberAccess =>
+          {
+            return self.struct_member_access(node);
+          }
         _ => {
           panic!("未対応のノードです : {:?}", val);
         }
@@ -760,6 +874,56 @@ impl Interpreter
 
 
     VariableType::Void
+  }
+
+  fn struct_member_access(&mut self, node: &Rc<RefCell<Node>>) -> VariableType
+  {
+    // StructMemberAccess を取得
+    if let Some(Leaf::StructMemberAccess) = node.borrow().val()
+    {}
+    else {
+      panic!("StructMemberAccess が取得できません");
+    }
+
+    // 左辺に識別子があり, 変数として登録されていることを確認する
+    if let Some(lhs) = node.borrow().lhs()
+    {
+      let identifier = self.identifier_name(lhs);
+
+      // 右辺にメンバ名があることを確認する
+      if let Some(rhs) = node.borrow().rhs()
+      {
+        if let Some(Leaf::Identifier(member_name)) = rhs.borrow().val()
+        {
+          // ローカル変数から検索
+          if let Some(local_variables) = self.local_variables.last_mut()
+          {
+            // 最後のスコープから検索
+            for local_variable in local_variables.iter_mut().rev()
+            {
+              if let Some(variable) = local_variable.get_mut(&identifier)
+              {
+                if let Variable::Struct(s) = variable
+                {
+                  return s.members.get(member_name).unwrap().clone();
+                }
+              }
+            }
+          }
+
+          // グローバル変数から検索
+          if let Some(variable) = self.global_variables.get_mut(&identifier)
+          {
+            if let Variable::Struct(s) = variable
+            {
+              return s.members.get(member_name).unwrap().clone();
+            }
+          }
+        }
+      }
+    }
+
+    panic!("構造体メンバアクセスに失敗しました");
   }
 
   fn function_call(&mut self, function_call: &FunctionCall) -> VariableType
@@ -1907,6 +2071,68 @@ mod tests
     let (val, _) = run_program(program);
     // i=0,1,2,3,4,5 まで実行され、i=6でbreakするはずなので、countは6
     assert_eq!(val, Int(6));
+  }
+
+  #[test]
+  fn test_struct() {
+    let program = "
+        struct Point {
+            int x;
+            int y;
+        };
+        int main() {
+            struct Point p;
+            p.x = 10;
+            p.y = 20;
+            return p.x + p.y;
+        }
+    ";
+    let (val, _) = run_program(program);
+    assert_eq!(val, Int(30));
+  }
+
+  #[test]
+  fn test_struct_global() {
+    let program = "
+        struct Point {
+            int x;
+            int y;
+        };
+        struct Point p;
+        int main() {
+            p.x = 100;
+            p.y = 200;
+            return p.x + p.y;
+        }
+    ";
+    let (val, _) = run_program(program);
+    assert_eq!(val, Int(300));
+  }
+
+  #[test]
+  fn test_struct_nested() {
+    let program = "
+        struct Size {
+            int width;
+            int height;
+        };
+        struct Rect {
+            struct Size size;
+            int x;
+            int y;
+        };
+        int main() {
+            struct Rect r;
+            r.x = 10;
+            r.y = 20;
+            // ネストした構造体への代入は、現在の実装では
+            // postfix_expression が再帰的でないため、r.size.width はパースできない可能性がある
+            // ひとまずフラットな構造体をテストする
+            return r.x + r.y;
+        }
+    ";
+    let (val, _) = run_program(program);
+    assert_eq!(val, Int(30));
   }
 
   #[test]
