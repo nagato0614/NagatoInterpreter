@@ -63,6 +63,7 @@ pub enum ValueType {
     Int,
     Float,
     Struct(String),
+    Array(Box<ValueType>, usize),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -300,11 +301,15 @@ impl Lexer
     // 定義したマクロを元に置換
     fn macro_replace(&mut self)
     {
+        if self.macros.is_empty() {
+            return;
+        }
+
         let mut new_sentence = String::new();
 
         // マクロの定義後から undef までの行を取得し置換する
         let lines = self.sentence.lines().collect::<Vec<&str>>();
-        for (i, line) in lines.iter().enumerate()
+        for line in lines.iter()
         {
             let mut is_replaced = false;
             for m in &self.macros
@@ -333,7 +338,6 @@ impl Lexer
     fn preprocess(&mut self)
     {
         // マクロは行の先頭に書かれていない場合はエラーとする
-        let mut is_first = true;
         let mut line_count = 0;
 
         loop
@@ -349,28 +353,19 @@ impl Lexer
                 '\n' => {
                     // 行末まで読み込んだら値をクリアする.
                     self.token_str.clear();
-                    is_first = true;
                     line_count += 1;
                 }
                 '#' => {
                     // マクロの定義
-                    if self.token_str.len() == 0
+                    if self.token_str.trim().is_empty()
                     {
                         // 行の先頭の場合はマクロ定義
                         self.macro_define(line_count);
                     }
-
-                    is_first = false;
                 }
-                'a'..='z' | 'A'..='Z' | '_' =>
-                    {
-                        is_first = false;
-                    }
-                '0'..='9' =>
-                    {
-                        is_first = false;
-                    }
-                _ => {}
+                _ => {
+                    self.add_char(c);
+                }
             }
         }
 
@@ -378,7 +373,7 @@ impl Lexer
         self.macro_replace();
 
         // # で始まる行をすべて削除
-        self.sentence = self.sentence.lines().filter(|line| !line.starts_with("#")).collect::<Vec<&str>>().join("\n");
+        self.sentence = self.sentence.lines().filter(|line| !line.trim().starts_with("#")).collect::<Vec<&str>>().join("\n");
     }
 
     pub fn tokenize(&mut self)
@@ -413,9 +408,8 @@ impl Lexer
                 '.' =>
                     {
                         // 数値の一部か、構造体メンバアクセスか判定
-                        // 0..9 の後に . が来た場合は数値の一部とする
-                        // そうでない場合は Token::Dot とする
-                        if self.token_str.chars().last().map_or(false, |c| c.is_ascii_digit()) {
+                        // token_str が空でなく、かつ全て数字の場合のみ数値の一部とする
+                        if !self.token_str.is_empty() && self.token_str.chars().all(|c| c.is_ascii_digit()) {
                             self.add_char(c);
                         } else {
                             self.add_token();

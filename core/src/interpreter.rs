@@ -43,8 +43,10 @@ pub enum VariableType
   Int(i32),
   Float(f64),
   Struct(Struct),
+  Array(Rc<RefCell<Array>>),
   Void,
   Break,
+  Continue,
   Return(Box<VariableType>),
 }
 
@@ -58,8 +60,10 @@ impl std::fmt::Display for VariableType
       VariableType::Int(val) => write!(f, "{}", val),
       VariableType::Float(val) => write!(f, "{}", val),
       VariableType::Struct(s) => write!(f, "struct {}", s.name),
+      VariableType::Array(a) => write!(f, "array {}", a.borrow().name),
       VariableType::Void => write!(f, "void"),
       VariableType::Break => write!(f, "break"),
+      VariableType::Continue => write!(f, "continue"),
       VariableType::Return(val) => write!(f, "return {}", val),
     }
   }
@@ -93,7 +97,7 @@ impl Struct
 #[derive(Debug, Clone, PartialEq)]
 pub enum Variable {
   Value(VariableType),
-  Array(Array),
+  Array(Rc<RefCell<Array>>),
   Struct(Struct),
 }
 
@@ -315,6 +319,10 @@ impl Interpreter
           {
             return VariableType::Break;
           }
+        Leaf::Continue =>
+          {
+            return VariableType::Continue;
+          }
         Leaf::BlockItem(nodes) =>
           {
             return self.compound_statement(nodes, true);
@@ -382,7 +390,7 @@ impl Interpreter
               {
                 if let Variable::Array(array) = variable
                 {
-                  array.values[index as usize] = value;
+                  array.borrow_mut().values[index as usize] = value;
                   return VariableType::Void;
                 }
               }
@@ -392,7 +400,7 @@ impl Interpreter
             {
               if let Variable::Array(array) = variable
               {
-                array.values[index as usize] = value;
+                array.borrow_mut().values[index as usize] = value;
               } else {
                 panic!("Global 変数が見つかりません : {}", identifier);
               }
@@ -401,7 +409,7 @@ impl Interpreter
             }
           }
         } else {
-          panic!("右辺に識別子があ��ません");
+          panic!("右辺に識別子がありません");
         }
       } else {
         panic!("左辺に識別子がありません");
@@ -444,6 +452,11 @@ impl Interpreter
           VariableType::Break => {
             break;
           }
+          VariableType::Continue => {
+            // 更新式を実行してから次のループへ
+            self.interpret_node(update);
+            continue;
+          }
           VariableType::Return(return_val) => {
             return VariableType::Return(return_val);
           }
@@ -478,6 +491,10 @@ impl Interpreter
             {
               VariableType::Break => {
                 break;
+              }
+              VariableType::Continue => {
+                // そのまま次のループへ (条件評価へ)
+                continue;
               }
               VariableType::Return(return_val) => {
                 return VariableType::Return(return_val);
@@ -604,26 +621,40 @@ impl Interpreter
         } else if let Some(Leaf::StructMemberAccess) = lhs.borrow().val() {
           // 構造体メンバへの代入
           if let Some(struct_node) = lhs.borrow().lhs() {
-            let struct_identifier = self.identifier_name(struct_node);
+            // 構造体ノードが識別子の場合だけでなく、より複雑な後置修飾式を評価できるように修正
+            let struct_val = self.statement(struct_node);
+            let mut struct_identifier: Option<String> = None;
+
+            // もし識別子なら、元の変数を特定する
+            if let Some(Leaf::Identifier(name)) = struct_node.borrow().val() {
+              struct_identifier = Some(name.clone());
+            }
+
             if let Some(member_node) = lhs.borrow().rhs() {
               if let Some(Leaf::Identifier(member_name)) = member_node.borrow().val() {
-                // ローカル変数から検索
-                if let Some(local_variables) = self.local_variables.last_mut() {
-                  for local_variable in local_variables.iter_mut().rev() {
-                    if let Some(variable) = local_variable.get_mut(&struct_identifier) {
-                      if let Variable::Struct(s) = variable {
-                        s.members.insert(member_name.clone(), value);
-                        return VariableType::Void;
+                // もし構造体が識別子なら、元の変数を更新する
+                if let Some(id) = struct_identifier {
+                  // ローカル変数から検索
+                  if let Some(local_variables) = self.local_variables.last_mut() {
+                    for local_variable in local_variables.iter_mut().rev() {
+                      if let Some(variable) = local_variable.get_mut(&id) {
+                        if let Variable::Struct(s) = variable {
+                          s.members.insert(member_name.clone(), value);
+                          return VariableType::Void;
+                        }
                       }
                     }
                   }
-                }
-                // グローバル変数から検索
-                if let Some(variable) = self.global_variables.get_mut(&struct_identifier) {
-                  if let Variable::Struct(s) = variable {
-                    s.members.insert(member_name.clone(), value);
-                    return VariableType::Void;
+                  // グローバル変数から検索
+                  if let Some(variable) = self.global_variables.get_mut(&id) {
+                    if let Variable::Struct(s) = variable {
+                      s.members.insert(member_name.clone(), value);
+                      return VariableType::Void;
+                    }
                   }
+                } else {
+                    // 識別子でない場合は、今のところ代入をサポートしない（例：(p1).x = 10 など）
+                    panic!("構造体への代入に失敗しました：左辺が識別子ではありません");
                 }
               }
             }
@@ -657,11 +688,15 @@ impl Interpreter
         ValueType::Void => {
           panic!("void の配列は定義できません");
         }
+        ValueType::Array(_, _) =>
+          {
+            panic!("多次元配列は未対応です");
+          }
       }
     }
 
     let array = Array::new(identifier.clone(), VariableType::Int(0), values);
-    self.insert_variable(identifier, Variable::Array(array));
+    self.insert_variable(identifier, Variable::Array(Rc::new(RefCell::new(array))));
   }
 
   fn variable_definition(&mut self, value_type: &ValueType, identifier: String, value: VariableType)
@@ -709,6 +744,10 @@ impl Interpreter
       ValueType::Void => {
         panic!("void 型の変数は定義できません");
       }
+      ValueType::Array(_, _) =>
+        {
+          panic!("配列の代入による初期化は未対応です");
+        }
     }
   }
 
@@ -823,57 +862,35 @@ impl Interpreter
       panic!("ArrayAccess が取得できません");
     }
 
-    // 左辺に識別子があり, 変数として登録されていることを確認する
+    // 左辺に配列（または式）があることを確認する
     if let Some(lhs) = node.borrow().lhs()
     {
-      let identifier = self.identifier_name(lhs);
+      let mut array_val = self.statement(lhs);
+      // Return の場合は中身を取り出す
+      if let VariableType::Return(inner) = array_val {
+        array_val = inner.as_ref().clone();
+      }
 
-      // 右辺に index があることを確認する
-      if let Some(rhs) = node.borrow().rhs()
-      {
-        let index = self.statement(rhs);
-        let index = match index
+      if let VariableType::Array(array) = array_val {
+        // 右辺に index があることを確認する
+        if let Some(rhs) = node.borrow().rhs()
         {
-          VariableType::Int(val) => val,
-          _ => panic!("Array index は整数で指定してください")
-        };
-
-        // ローカル変数から検索
-        if let Some(local_variables) = self.local_variables.last_mut()
-        {
-          // 最後のスコープから検索
-          for local_variable in local_variables.iter_mut().rev()
+          let index = self.statement(rhs);
+          let index = match index
           {
-            if let Some(variable) = local_variable.get_mut(&identifier)
-            {
-              if let Variable::Array(array) = variable
-              {
-                return array.values[index as usize].clone();
-              }
-            }
-          }
-          // グローバル変数から検索
-          if let Some(variable) = self.global_variables.get_mut(&identifier)
-          {
-            if let Variable::Array(array) = variable
-            {
-              return array.values[index as usize].clone();
-            } else {
-              panic!("Global 変数が見つかりません : {}", identifier);
-            }
-          } else {
-            panic!("Global 変数が見つかりません : {}", identifier);
-          }
+            VariableType::Int(val) => val,
+            _ => panic!("Array index は整数で指定してください")
+          };
+          return array.borrow().values[index as usize].clone();
+        } else {
+          panic!("右辺に index がありません");
         }
       } else {
-        panic!("右辺に index がありません");
+        panic!("配列ではありません : {:?}", array_val);
       }
     } else {
-      panic!("左辺に識別子がありません");
+      panic!("左辺に配列がありません");
     }
-
-
-    VariableType::Void
   }
 
   fn struct_member_access(&mut self, node: &Rc<RefCell<Node>>) -> VariableType
@@ -885,41 +902,26 @@ impl Interpreter
       panic!("StructMemberAccess が取得できません");
     }
 
-    // 左辺に識別子があり, 変数として登録されていることを確認する
+    // 左辺に構造体があることを確認する
     if let Some(lhs) = node.borrow().lhs()
     {
-      let identifier = self.identifier_name(lhs);
+      let mut struct_val = self.statement(lhs);
+      // struct_val が Return の場合は中身を取り出す
+      if let VariableType::Return(inner) = struct_val {
+          struct_val = inner.as_ref().clone();
+      }
 
-      // 右辺にメンバ名があることを確認する
-      if let Some(rhs) = node.borrow().rhs()
-      {
-        if let Some(Leaf::Identifier(member_name)) = rhs.borrow().val()
-        {
-          // ローカル変数から検索
-          if let Some(local_variables) = self.local_variables.last_mut()
+      if let VariableType::Struct(s) = struct_val {
+          // 右辺にメンバ名があることを確認する
+          if let Some(rhs) = node.borrow().rhs()
           {
-            // 最後のスコープから検索
-            for local_variable in local_variables.iter_mut().rev()
+            if let Some(Leaf::Identifier(member_name)) = rhs.borrow().val()
             {
-              if let Some(variable) = local_variable.get_mut(&identifier)
-              {
-                if let Variable::Struct(s) = variable
-                {
-                  return s.members.get(member_name).unwrap().clone();
-                }
-              }
+              return s.members.get(member_name).expect(&format!("メンバ {} が見つかりません", member_name)).clone();
             }
           }
-
-          // グローバル変数から検索
-          if let Some(variable) = self.global_variables.get_mut(&identifier)
-          {
-            if let Variable::Struct(s) = variable
-            {
-              return s.members.get(member_name).unwrap().clone();
-            }
-          }
-        }
+      } else {
+          panic!("構造体ではありません : {:?}", struct_val);
       }
     }
 
@@ -950,12 +952,44 @@ impl Interpreter
 
         for (i, argument) in function_arguments.iter().enumerate()
         {
-          let argument_value = self.statement(argument);
+          let mut argument_value = self.statement(argument);
           let argument_name = function_definition.arguments()[i].identify().clone();
+          let argument_type = function_definition.arguments()[i].type_specifier();
+
           // 引数をローカル変数に追加
           if let Some(local_variables) = self.local_variables.last_mut()
           {
-            new_variables.insert(argument_name, Variable::Value(argument_value));
+            match argument_type
+            {
+              ValueType::Array(_, _) =>
+                {
+                  if let VariableType::Array(array) = argument_value
+                  {
+                    new_variables.insert(argument_name, Variable::Array(array));
+                  } else {
+                    panic!("配列が期待されていますが、別の型が渡されました");
+                  }
+                }
+              ValueType::Struct(_) =>
+                {
+                  if let VariableType::Struct(s) = argument_value
+                  {
+                    // 構造体の値渡し（コピー）
+                    new_variables.insert(argument_name, Variable::Struct(s.clone()));
+                  } else {
+                    panic!("構造体が期待されていますが、別の型が渡されました");
+                  }
+                }
+              _ =>
+                {
+                  // value が 定数ではなく Return の時中身を取り出す
+                  if let VariableType::Return(val) = argument_value
+                  {
+                    argument_value = val.as_ref().clone();
+                  }
+                  new_variables.insert(argument_name, Variable::Value(argument_value));
+                }
+            }
           }
         }
       }
@@ -1004,7 +1038,7 @@ impl Interpreter
       return_value = self.interpret_node(statement);
       match return_value
       {
-        VariableType::Return(_) | VariableType::Break => {
+        VariableType::Return(_) | VariableType::Break | VariableType::Continue => {
           break;
         }
         _ => {}
@@ -1079,17 +1113,21 @@ impl Interpreter
           match variable
           {
             Variable::Value(value) => return value.clone(),
-            _ => {
-              panic!("未対応の変数です : {:?}", variable);
-            }
+            Variable::Array(array) => return VariableType::Array(array.clone()),
+            Variable::Struct(s) => return VariableType::Struct(s.clone()),
           }
         }
       }
     }
 
     // グローバル変数から検索
-    if let Some(Variable::Value(value)) = self.global_variables.get(identifier) {
-      return value.clone();
+    if let Some(variable) = self.global_variables.get(identifier) {
+      match variable
+      {
+        Variable::Value(value) => return value.clone(),
+        Variable::Array(array) => return VariableType::Array(array.clone()),
+        Variable::Struct(s) => return VariableType::Struct(s.clone()),
+      }
     }
 
     panic!("未定義の変数です : {}", identifier);
@@ -1988,8 +2026,8 @@ mod tests
     let (val, globals) = run_program(program);
     assert_eq!(val, Int(34));
     if let Variable::Array(arr) = globals.get("result").unwrap() {
-        assert_eq!(arr.values().len(), 10);
-        assert_eq!(arr.values()[9], Int(34));
+        assert_eq!(arr.borrow().values().len(), 10);
+        assert_eq!(arr.borrow().values()[9], Int(34));
     } else {
         panic!("result should be an array");
     }
@@ -2151,5 +2189,97 @@ mod tests
     parser.parse();
     let interpreter = Interpreter::new(parser.roots());
     interpreter.show_variables();
+  }
+
+  #[test]
+  fn test_pass_array_to_function() {
+    let program = "
+            int get_first(int a[10]) {
+                return a[0];
+            }
+            int main() {
+                int arr[10];
+                arr[0] = 42;
+                return get_first(arr);
+            }
+        ";
+    let (val, _) = run_program(program);
+    let val = match val {
+        VariableType::Return(v) => *v,
+        _ => val,
+    };
+    assert_eq!(val, Int(42));
+  }
+
+  #[test]
+  fn test_pass_array_by_reference() {
+    let program = "
+            void set_first(int a[10], int val) {
+                a[0] = val;
+            }
+            int main() {
+                int arr[10];
+                arr[0] = 1;
+                set_first(arr, 42);
+                return arr[0];
+            }
+        ";
+    let (val, _) = run_program(program);
+    let val = match val {
+        VariableType::Return(v) => *v,
+        _ => val,
+    };
+    assert_eq!(val, Int(42));
+  }
+
+  #[test]
+  fn test_pass_struct_to_function() {
+    let program = "
+            struct Point {
+                int x;
+                int y;
+            };
+            int get_sum(struct Point p) {
+                p.x = p.x + p.y;
+                return p.x;
+            }
+            int main() {
+                struct Point p1;
+                p1.x = 10;
+                p1.y = 20;
+                int s = get_sum(p1);
+                // 値渡しなので p1.x は変わらないはず
+                int result = s + p1.x;
+                return result;
+            }
+        ";
+    let (val, _) = run_program(program);
+    let val = match val {
+      VariableType::Return(v) => *v,
+      _ => val,
+    };
+    assert_eq!(val, Int(30 + 10));
+  }
+
+  #[test]
+  fn test_continue() {
+    let program = "
+            int main() {
+                int sum = 0;
+                int i;
+                for (i = 0; i < 10; i = i + 1) {
+                    if (i % 2 == 0) { continue; }
+                    sum = sum + i;
+                }
+                return sum;
+            }
+        ";
+    let (val, _) = run_program(program);
+    let val = match val {
+      VariableType::Return(v) => *v,
+      _ => val,
+    };
+    // 1 + 3 + 5 + 7 + 9 = 25
+    assert_eq!(val, Int(25));
   }
 }

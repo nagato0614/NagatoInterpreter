@@ -864,7 +864,6 @@ impl Parser
                 Token::Assign => {
                     // '=' の場合は initializer をパースする
                     if let Some(initializer) = self.logical_or_expression(&root) {
-                        println!("initializer");
                         root.borrow_mut().set_rhs(initializer);
                     }
                 }
@@ -918,25 +917,15 @@ impl Parser
         }
 
         // 次のトークンが '=' かどうか
-        if let Some(next_token) = self.get_next_token()
+        if let Some(Token::Assign) = self.get_next_token()
         {
-            match next_token
-            {
-                Token::Assign => {
-                    // '=' の場合は initializer をパースする
-                    if let Some(initializer) = self.logical_or_expression(&root) {
-                        println!("initializer");
-                        root.borrow_mut().set_rhs(initializer);
-                    }
-                }
-                _ => {
-                    panic!("初期化子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
-                }
+            // '=' の場合は initializer をパースする
+            if let Some(initializer) = self.logical_or_expression(&root) {
+                root.borrow_mut().set_rhs(initializer);
             }
         } else {
-            panic!("トークンがありません");
+            panic!("'=' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
         }
-
 
         root
     }
@@ -989,29 +978,53 @@ impl Parser
             return;
         }
 
-        // 一個目の型が void の場合は何もせずに終了
-        if let Some(Token::Type(type_specifier)) = self.get_next_token_without_increment()
-        {
-            if type_specifier == ValueType::Void {
-                self.token_index_increment();
-                return;
-            }
-        }
-
         loop {
-            if let Some(Token::Type(type_specifier)) = self.get_next_token_without_increment()
-            {
-                self.token_index_increment();
+            // 型指定子を取得 (int, float, struct など)
+            let type_specifier = match self.get_next_token() {
+                Some(Token::Type(t)) => t,
+                Some(Token::Struct) => {
+                    if let Some(Token::Identifier(struct_name)) = self.get_next_token() {
+                        ValueType::Struct(struct_name)
+                    } else {
+                        panic!("構造体名が見つかりませんでした");
+                    }
+                }
+                _ => panic!("引数の型が見つかりませんでした : {:?}", self.tokens[self.token_index]),
+            };
 
-                // 型がある場合は識別子が続く
-                if let Some(Token::Identifier(identifier)) = self.get_next_token()
+            if type_specifier == ValueType::Void && function_definition.arguments().is_empty() {
+                // (void) の形式
+                if let Some(Token::RightParen) = self.get_next_token_without_increment() {
+                    return;
+                }
+            }
+
+            // 型がある場合は識別子が続く
+            if let Some(Token::Identifier(identifier)) = self.get_next_token()
+            {
+                // 配列の場合は '[' が続く
+                if let Some(Token::LeftBracket) = self.get_next_token_without_increment()
                 {
-                    function_definition.add_argument(type_specifier, identifier);
+                    self.token_index_increment();
+                    // '[' が来た場合は配列
+                    if let Some(Token::Constant(Constant::Integer(size))) = self.get_next_token()
+                    {
+                        // ']' が来ることを確認
+                        if let Some(Token::RightBracket) = self.get_next_token()
+                        {
+                            let array_type = ValueType::Array(Box::new(type_specifier), size as usize);
+                            function_definition.add_argument(array_type, identifier);
+                        } else {
+                            panic!("']' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+                        }
+                    } else {
+                        panic!("配列のサイズが見つかりませんでした : {:?}", self.tokens[self.token_index]);
+                    }
                 } else {
-                    panic!("関数の引数の識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+                    function_definition.add_argument(type_specifier, identifier);
                 }
             } else {
-                panic!("関数の型が見つかりませんでした : {:?}", self.tokens[self.token_index]);
+                panic!("関数の引数の識別子が見つかりませんでした : {:?}", self.tokens[self.token_index]);
             }
 
             // 次のトークンが ',' か ')' かを調べて ',' なら次の引数を取得する
@@ -1090,13 +1103,11 @@ impl Parser
                 Token::Assign => {
                     // '=' の場合は initializer をパースする
                     if let Some(initializer) = self.logical_or_expression(&root) {
-                        println!("initializer");
                         root.borrow_mut().set_rhs(initializer);
                     }
 
                     // ';' が来ることを確認
                     if let Some(Token::Semicolon) = self.get_next_token() {
-                        println!("semicolon");
                         // 何もしない
                     } else {
                         panic!("';' が見つかりませんでした : {:?}", self.tokens[self.token_index]);
@@ -1106,7 +1117,6 @@ impl Parser
                     // 何もしない
                 }
                 Token::LeftBracket => {
-                    println!("array");
                     // 配列の場合
                     if let Some(Token::Constant(Constant::Integer(size))) = self.get_next_token() {
                         let right_node = Rc::new(RefCell::new(Node::new()));
@@ -1419,7 +1429,6 @@ impl Parser
                                         = self.logical_or_expression(&node);
 
                                     if let Some(arg) = logical_or_expression_node {
-                                        println!("arg : {:?}", arg);
                                         function_call.add_argument(arg);
                                     }
 
@@ -1434,7 +1443,6 @@ impl Parser
                                         }
                                         _ => {
                                             // 何もしない
-                                            println!("skip : {:?}", self.tokens[self.token_index]);
                                         }
                                     }
                                 }
@@ -1490,9 +1498,33 @@ impl Parser
                                 } else {
                                     panic!("メンバ名が見つかりませんでした");
                                 }
+
+                                // さらに '.' が続く場合は再帰的に処理するために node を parent にして postfix_expression を呼び出す必要があるが、
+                                // 現状は一階層のみ。
+                                if let Some(Token::Dot) = self.get_next_token_without_increment() {
+                                    // 再帰的なメンバアクセスをサポートするためのループ
+                                    loop {
+                                        if let Some(Token::Dot) = self.get_next_token_without_increment() {
+                                            self.token_index_increment();
+                                            let next_node = Rc::new(RefCell::new(Node::new()));
+                                            next_node.borrow_mut().set_val(Leaf::StructMemberAccess);
+                                            next_node.borrow_mut().set_lhs(node.clone());
+
+                                            if let Some(Token::Identifier(m_name)) = self.get_next_token() {
+                                                let r_node = Rc::new(RefCell::new(Node::new()));
+                                                r_node.borrow_mut().set_val(Leaf::Identifier(m_name));
+                                                next_node.borrow_mut().set_rhs(r_node);
+                                                node = next_node;
+                                            } else {
+                                                panic!("メンバ名が見つかりませんでした");
+                                            }
+                                        } else {
+                                            break;
+                                        }
+                                    }
+                                }
                             }
                             _ => {
-                                println!("postfix_expression : {:?}", identify);
                                 // それ以外の場合は identifier として処理する
                                 node.borrow_mut().set_val(Leaf::Identifier(identify));
                             }

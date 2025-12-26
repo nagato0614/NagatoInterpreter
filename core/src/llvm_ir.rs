@@ -295,6 +295,9 @@ impl<'ctx> CodeGen<'ctx>
             ValueType::Struct(_) => {
                 panic!("LLVM IR では構造体は未対応です");
             }
+            ValueType::Array(_, _) => {
+                panic!("LLVM IR では配列は未対応です");
+            }
         }
     }
 
