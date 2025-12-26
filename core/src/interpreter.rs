@@ -1505,6 +1505,11 @@ mod tests
                 count = count + 1;
             }
             
+            float f = 1.0;
+            if (f) {
+                sum = sum + 100;
+            }
+
             int i;
             result[0] = 0;
             result[1] = 1;
@@ -1535,7 +1540,7 @@ mod tests
     let mut variables = HashMap::new();
     variables.insert("x".to_string(), Variable::Value(Int(88)));
     variables.insert("fib".to_string(), Variable::Value(Int(55)));
-    variables.insert("sum".to_string(), Variable::Value(Int(45)));
+    variables.insert("sum".to_string(), Variable::Value(Int(145)));
 
     // フィボナッチ数列の計算
     let fib = vec![0, 1, 1, 2, 3, 5, 8, 13, 21, 34];
