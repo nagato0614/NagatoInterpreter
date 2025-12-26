@@ -96,3 +96,6 @@ target
 log.txt
 line.txt
 output*
+coverage
+.DS_Store
+*.profraw
