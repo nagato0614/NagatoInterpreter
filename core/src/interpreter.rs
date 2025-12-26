@@ -1546,6 +1546,11 @@ mod tests
                 result[i] = result[i - 1] + result[i - 2];
             }
 
+            sum = sum + (10 % 3);
+            sum = sum + (10.5 % 3.0);
+            sum = sum + (10 % 3.0);
+            sum = sum + (10.5 % 3);
+
             return d;
         }
         ");
@@ -1574,7 +1579,7 @@ mod tests
     let mut variables = HashMap::new();
     variables.insert("x".to_string(), Variable::Value(Int(88)));
     variables.insert("fib".to_string(), Variable::Value(Int(55)));
-    variables.insert("sum".to_string(), Variable::Value(Int(656)));
+    variables.insert("sum".to_string(), Variable::Value(Int(660)));
 
     // フィボナッチ数列の計算
     let fib = vec![0, 1, 1, 2, 3, 5, 8, 13, 21, 34];
