@@ -507,6 +507,7 @@ impl Lexer
                                 {
                                     self.add_token();
                                     self.tokens.push(Token::UnaryOperator(UnaryOperator::LogicalNot));
+                                    self.back_char();
                                 }
                         }
                     }
@@ -578,6 +579,7 @@ impl Lexer
                                         '<' => Operator::LessThan,
                                         _ => unreachable!(),
                                     }));
+                                    self.back_char();
                                 }
                         }
                     }

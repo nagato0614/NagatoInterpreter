@@ -1510,6 +1510,35 @@ mod tests
                 sum = sum + 100;
             }
 
+            float f2;
+            f2 = -f;
+            if (!f2) {
+                sum = sum + 1000;
+            } else {
+                sum = sum + 200;
+            }
+
+            int cond = (a > b) && (b > 0);
+            int cond2 = (a < b) || (b < 0);
+            if (cond || cond2) {
+                sum = sum + 300;
+            }
+
+            if (a != b) {
+                sum = sum + 1;
+            }
+            if (a >= b) {
+                sum = sum + 2;
+            }
+            if (a <= b) {
+                sum = sum + 4;
+            }
+
+            float val_zero = 0.0;
+            if (!val_zero) {
+                sum = sum + 8;
+            }
+
             int i;
             result[0] = 0;
             result[1] = 1;
@@ -1531,6 +1560,11 @@ mod tests
     let mut interpreter = Interpreter::new(parser.roots());
     let val = interpreter.run();
 
+    interpreter.show_variables();
+    println!("Return value: {}", val);
+    println!("Void: {}", VariableType::Void);
+    println!("Break: {}", VariableType::Break);
+
     assert_eq!(val, Int(103));
 
     // global 変数の値を確認する
@@ -1540,7 +1574,7 @@ mod tests
     let mut variables = HashMap::new();
     variables.insert("x".to_string(), Variable::Value(Int(88)));
     variables.insert("fib".to_string(), Variable::Value(Int(55)));
-    variables.insert("sum".to_string(), Variable::Value(Int(145)));
+    variables.insert("sum".to_string(), Variable::Value(Int(656)));
 
     // フィボナッチ数列の計算
     let fib = vec![0, 1, 1, 2, 3, 5, 8, 13, 21, 34];
