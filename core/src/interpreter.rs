@@ -1470,140 +1470,382 @@ mod tests
   use std::collections::HashMap;
   use crate::lexical::Lexer;
 
+  fn run_program(program: &str) -> (VariableType, HashMap<String, Variable>) {
+    let mut lexer = Lexer::new(program.to_string());
+    lexer.tokenize();
+    let tokens = lexer.tokens().clone();
+    let mut parser = Parser::new(tokens);
+    parser.parse();
+    let mut interpreter = Interpreter::new(parser.roots());
+    let val = interpreter.run();
+    (val, interpreter.global_variables().clone())
+  }
+
   #[test]
-  fn test_static_variable()
-  {
-    let program = String::from("
-        int x = (10 + 20) * 3 - 4 / 2;
-        int fib = 0;
-        int sum = 0;
-        int result[10];
+  fn test_add() {
+    let program = "
+        int i_add = 10 + 20;
+        float f_add = 10.5 + 20.5;
+        float mix_add1 = 10 + 20.5;
+        float mix_add2 = 10.5 + 20;
+        int main() { return 0; }
+    ";
+    let (_, globals) = run_program(program);
+    assert_eq!(globals.get("i_add").unwrap(), &Variable::Value(Int(30)));
+    assert_eq!(globals.get("f_add").unwrap(), &Variable::Value(Float(31.0)));
+    assert_eq!(globals.get("mix_add1").unwrap(), &Variable::Value(Float(30.5)));
+    assert_eq!(globals.get("mix_add2").unwrap(), &Variable::Value(Float(30.5)));
+  }
 
-        int add(int a, int b) { return a + b; }
-        int sub(int a, int b) { return a - b; }
-        int fibo(int n) {
-            if (n == 0) {
-                return 0;
-            } else if (n == 1) {
-                return 1;
-            } else {
-                return fibo(n - 1) + fibo(n - 2);
-            }
+  #[test]
+  fn test_sub() {
+    let program = "
+        int i_sub = 30 - 10;
+        float f_sub = 30.5 - 10.5;
+        float mix_sub1 = 30 - 10.5;
+        float mix_sub2 = 30.5 - 10;
+        int main() { return 0; }
+    ";
+    let (_, globals) = run_program(program);
+    assert_eq!(globals.get("i_sub").unwrap(), &Variable::Value(Int(20)));
+    assert_eq!(globals.get("f_sub").unwrap(), &Variable::Value(Float(20.0)));
+    assert_eq!(globals.get("mix_sub1").unwrap(), &Variable::Value(Float(19.5)));
+    assert_eq!(globals.get("mix_sub2").unwrap(), &Variable::Value(Float(20.5)));
+  }
+
+  #[test]
+  fn test_mul() {
+    let program = "
+        int i_mul = 10 * 20;
+        float f_mul = 10.5 * 2.0;
+        float mix_mul1 = 10 * 2.5;
+        float mix_mul2 = 2.5 * 10;
+        int main() { return 0; }
+    ";
+    let (_, globals) = run_program(program);
+    assert_eq!(globals.get("i_mul").unwrap(), &Variable::Value(Int(200)));
+    assert_eq!(globals.get("f_mul").unwrap(), &Variable::Value(Float(21.0)));
+    assert_eq!(globals.get("mix_mul1").unwrap(), &Variable::Value(Float(25.0)));
+    assert_eq!(globals.get("mix_mul2").unwrap(), &Variable::Value(Float(25.0)));
+  }
+
+  #[test]
+  fn test_div() {
+    let program = "
+        int i_div = 20 / 10;
+        float f_div = 20.0 / 8.0;
+        float mix_div1 = 20 / 8.0;
+        float mix_div2 = 20.0 / 8;
+        int main() { return 0; }
+    ";
+    let (_, globals) = run_program(program);
+    assert_eq!(globals.get("i_div").unwrap(), &Variable::Value(Int(2)));
+    assert_eq!(globals.get("f_div").unwrap(), &Variable::Value(Float(2.5)));
+    assert_eq!(globals.get("mix_div1").unwrap(), &Variable::Value(Float(2.5)));
+    assert_eq!(globals.get("mix_div2").unwrap(), &Variable::Value(Float(2.5)));
+  }
+
+  #[test]
+  fn test_equal() {
+    let program = "
+        int i_eq = (10 == 10);
+        int f_eq = (10.5 == 10.5);
+        int mix_eq1 = (10 == 10.0);
+        int mix_eq2 = (10.0 == 10);
+        int main() { return 0; }
+    ";
+    let (_, globals) = run_program(program);
+    assert_eq!(globals.get("i_eq").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("f_eq").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("mix_eq1").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("mix_eq2").unwrap(), &Variable::Value(Int(1)));
+  }
+
+  #[test]
+  fn test_not_equal() {
+    let program = "
+        int i_ne = (10 != 20);
+        int f_ne = (10.5 != 20.5);
+        int mix_ne1 = (10 != 20.5);
+        int mix_ne2 = (20.5 != 10);
+        int main() { return 0; }
+    ";
+    let (_, globals) = run_program(program);
+    assert_eq!(globals.get("i_ne").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("f_ne").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("mix_ne1").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("mix_ne2").unwrap(), &Variable::Value(Int(1)));
+  }
+
+  #[test]
+  fn test_less_than() {
+    let program = "
+        int i_lt = (10 < 20);
+        int f_lt = (10.5 < 20.5);
+        int mix_lt1 = (10 < 20.5);
+        int mix_lt2 = (10.5 < 20);
+        int main() { return 0; }
+    ";
+    let (_, globals) = run_program(program);
+    assert_eq!(globals.get("i_lt").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("f_lt").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("mix_lt1").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("mix_lt2").unwrap(), &Variable::Value(Int(1)));
+  }
+
+  #[test]
+  fn test_greater_than() {
+    let program = "
+        int i_gt = (20 > 10);
+        int f_gt = (20.5 > 10.5);
+        int mix_gt1 = (20 > 10.5);
+        int mix_gt2 = (20.5 > 10);
+        int main() { return 0; }
+    ";
+    let (_, globals) = run_program(program);
+    assert_eq!(globals.get("i_gt").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("f_gt").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("mix_gt1").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("mix_gt2").unwrap(), &Variable::Value(Int(1)));
+  }
+
+  #[test]
+  fn test_less_than_or_equal() {
+    let program = "
+        int i_le = (10 <= 10);
+        int f_le = (10.5 <= 10.5);
+        int mix_le1 = (10 <= 10.5);
+        int mix_le2 = (10.5 <= 11);
+        int main() { return 0; }
+    ";
+    let (_, globals) = run_program(program);
+    assert_eq!(globals.get("i_le").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("f_le").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("mix_le1").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("mix_le2").unwrap(), &Variable::Value(Int(1)));
+  }
+
+  #[test]
+  fn test_greater_than_or_equal() {
+    let program = "
+        int i_ge = (10 >= 10);
+        int f_ge = (10.5 >= 10.5);
+        int mix_ge1 = (11 >= 10.5);
+        int mix_ge2 = (10.5 >= 10);
+        int main() { return 0; }
+    ";
+    let (_, globals) = run_program(program);
+    assert_eq!(globals.get("i_ge").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("f_ge").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("mix_ge1").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("mix_ge2").unwrap(), &Variable::Value(Int(1)));
+  }
+
+  #[test]
+  fn test_logical_and() {
+    let program = "
+        int and_ii = 1 && 1;
+        int and_if = 1 && 1.0;
+        int and_fi = 1.0 && 1;
+        int and_ff = 1.0 && 1.0;
+        int and_zero = 1 && 0.0;
+        int main() { return 0; }
+    ";
+    let (_, globals) = run_program(program);
+    assert_eq!(globals.get("and_ii").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("and_if").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("and_fi").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("and_ff").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("and_zero").unwrap(), &Variable::Value(Int(0)));
+  }
+
+  #[test]
+  fn test_logical_or() {
+    let program = "
+        int or_ii = 0 || 1;
+        int or_if = 0 || 1.0;
+        int or_fi = 0.0 || 1;
+        int or_ff = 0.0 || 1.0;
+        int or_zero = 0 || 0.0;
+        int main() { return 0; }
+    ";
+    let (_, globals) = run_program(program);
+    assert_eq!(globals.get("or_ii").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("or_if").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("or_fi").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("or_ff").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("or_zero").unwrap(), &Variable::Value(Int(0)));
+  }
+
+  #[test]
+  fn test_logical_not() {
+    let program = "
+        int not_i = !1;
+        int not_f = !1.0;
+        int not_zero_i = !0;
+        int not_zero_f = !0.0;
+        int main() { return 0; }
+    ";
+    let (_, globals) = run_program(program);
+    assert_eq!(globals.get("not_i").unwrap(), &Variable::Value(Int(0)));
+    assert_eq!(globals.get("not_f").unwrap(), &Variable::Value(Int(0)));
+    assert_eq!(globals.get("not_zero_i").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("not_zero_f").unwrap(), &Variable::Value(Int(1)));
+  }
+
+  #[test]
+  fn test_arithmetic() {
+    let program = "
+        int a = (10 + 20) * 3 - 4 / 2;
+        float b = (10.0 + 20.0) * 3.0 - 4.0 / 2.0;
+        int c = -10 + 20;
+        float d = -10.5 + 20.5;
+        int main() {
+            return a;
         }
-    
-        int main(void) {
-            int a = 10;
-            int b = 20;
-            a = add(a * 2, (b + 10) / 2);
-            int c = sub(a, b);
-            int d = c + x;
-            fib = fibo(10);
-            
-            int count = 0;
-            while (count < 10) {
-                sum = sum + count;
-                count = count + 1;
+    ";
+    let (val, globals) = run_program(program);
+    assert_eq!(val, Int(88));
+    assert_eq!(globals.get("b").unwrap(), &Variable::Value(Float(88.0)));
+    assert_eq!(globals.get("c").unwrap(), &Variable::Value(Int(10)));
+    assert_eq!(globals.get("d").unwrap(), &Variable::Value(Float(10.0)));
+  }
+
+  #[test]
+  fn test_remain() {
+    let program = "
+        int b = 10 % 3;
+        float c = 10.5 % 3.0;
+        float d = 10 % 3.0;
+        float e = 10.5 % 3;
+        int main() {
+            return 0;
+        }
+    ";
+    let (_, globals) = run_program(program);
+    assert_eq!(globals.get("b").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("c").unwrap(), &Variable::Value(Float(1.0)));
+    assert_eq!(globals.get("d").unwrap(), &Variable::Value(Float(1.0)));
+    assert_eq!(globals.get("e").unwrap(), &Variable::Value(Float(1.0)));
+  }
+
+  #[test]
+  fn test_functions() {
+    let program = "
+        int add(int a, int b) { return a + b; }
+        int fibo(int n) {
+            if (n == 0) { return 0; }
+            if (n == 1) { return 1; }
+            return fibo(n - 1) + fibo(n - 2);
+        }
+        int main() {
+            int x = add(10, 20);
+            int y = fibo(10);
+            return x + y;
+        }
+    ";
+    let (val, _) = run_program(program);
+    assert_eq!(val, Int(30 + 55));
+  }
+
+  #[test]
+  fn test_while() {
+    let program = "
+        int sum_while = 0;
+        int main() {
+            int i = 0;
+            while (i < 10) {
+                sum_while = sum_while + i;
+                i = i + 1;
             }
-            
+            return 0;
+        }
+    ";
+    let (_, globals) = run_program(program);
+    assert_eq!(globals.get("sum_while").unwrap(), &Variable::Value(Int(45)));
+  }
+
+  #[test]
+  fn test_for() {
+    let program = "
+        int sum_for = 0;
+        int main() {
+            int j = 0;
+            for (j = 0; j < 10; j = j + 1) {
+                sum_for = sum_for + j;
+            }
+            return 0;
+        }
+    ";
+    let (_, globals) = run_program(program);
+    assert_eq!(globals.get("sum_for").unwrap(), &Variable::Value(Int(45)));
+  }
+
+  #[test]
+  fn test_selection_statement() {
+    let program = "
+        int res1 = 0;
+        int res2 = 0;
+        int res3 = 0;
+        int main() {
             float f = 1.0;
-            if (f) {
-                sum = sum + 100;
-            }
+            if (f) { res1 = 1; } else { res1 = 0; }
+            
+            float f0 = 0.0;
+            if (f0) { res2 = 1; } else { res2 = 0; }
 
-            float f2;
-            f2 = -f;
-            if (!f2) {
-                sum = sum + 1000;
-            } else {
-                sum = sum + 200;
+            if (1) {
+                if (0) { res3 = 1; } else { res3 = 2; }
             }
+            return 0;
+        }
+    ";
+    let (_, globals) = run_program(program);
+    assert_eq!(globals.get("res1").unwrap(), &Variable::Value(Int(1)));
+    assert_eq!(globals.get("res2").unwrap(), &Variable::Value(Int(0)));
+    assert_eq!(globals.get("res3").unwrap(), &Variable::Value(Int(2)));
+  }
 
-            int cond = (a > b) && (b > 0);
-            int cond2 = (a < b) || (b < 0);
-            if (cond || cond2) {
-                sum = sum + 300;
-            }
 
-            if (a != b) {
-                sum = sum + 1;
-            }
-            if (a >= b) {
-                sum = sum + 2;
-            }
-            if (a <= b) {
-                sum = sum + 4;
-            }
-
-            float val_zero = 0.0;
-            if (!val_zero) {
-                sum = sum + 8;
-            }
-
-            int i;
+  #[test]
+  fn test_arrays() {
+    let program = "
+        int result[10];
+        int main() {
+            int i = 0;
             result[0] = 0;
             result[1] = 1;
             for (i = 2; i < 10; i = i + 1) {
                 result[i] = result[i - 1] + result[i - 2];
             }
-
-            sum = sum + (10 % 3);
-            sum = sum + (10.5 % 3.0);
-            sum = sum + (10 % 3.0);
-            sum = sum + (10.5 % 3);
-
-            return d;
+            return result[9];
         }
-        ");
+    ";
+    let (val, globals) = run_program(program);
+    assert_eq!(val, Int(34));
+    if let Variable::Array(arr) = globals.get("result").unwrap() {
+        assert_eq!(arr.values().len(), 10);
+        assert_eq!(arr.values()[9], Int(34));
+    } else {
+        panic!("result should be an array");
+    }
+  }
 
-    let mut lexer = Lexer::new(program);
-    lexer.tokenize();
-
-    let tokens = lexer.tokens().clone();
-    let mut parser = Parser::new(tokens);
-    parser.parse();
-
-    let mut interpreter = Interpreter::new(parser.roots());
-    let val = interpreter.run();
-
-    interpreter.show_variables();
-    println!("Return value: {}", val);
+  #[test]
+  fn test_display_and_misc() {
     println!("Void: {}", VariableType::Void);
     println!("Break: {}", VariableType::Break);
-
-    assert_eq!(val, Int(103));
-
-    // global 変数の値を確認する
-    let global_variables = interpreter.global_variables();
-    assert_eq!(global_variables.len(), 4);
-
-    let mut variables = HashMap::new();
-    variables.insert("x".to_string(), Variable::Value(Int(88)));
-    variables.insert("fib".to_string(), Variable::Value(Int(55)));
-    variables.insert("sum".to_string(), Variable::Value(Int(660)));
-
-    // フィボナッチ数列の計算
-    let fib = vec![0, 1, 1, 2, 3, 5, 8, 13, 21, 34];
-    let array = Variable::Array(Array::new("result".to_string(), VariableType::Int(0), fib.iter().map(|&x| Int(x)).collect()));
-    variables.insert("result".to_string(), array);
-
-
-    for (name, variable) in global_variables
-    {
-      println!("{} = {:?}", name, variable);
-      match variable
-      {
-        Variable::Value(value) =>
-          {
-            assert_eq!(variables.get(name).unwrap(), &Variable::Value(value.clone()));
-          }
-        Variable::Array(array) =>
-          {
-            assert_eq!(variables.get(name).unwrap(), &Variable::Array(array.clone()));
-          }
-        _ => {
-          panic!("未対応の変数です");
-        }
-      }
-    }
+    println!("Int: {}", Int(10));
+    println!("Float: {}", Float(10.5));
+    println!("Return: {}", VariableType::Return(Box::new(Int(5))));
+    
+    // show_variables coverage
+    let program = "int x = 10; int main() { return x; }";
+    let mut lexer = Lexer::new(program.to_string());
+    lexer.tokenize();
+    let mut parser = Parser::new(lexer.tokens().clone());
+    parser.parse();
+    let interpreter = Interpreter::new(parser.roots());
+    interpreter.show_variables();
   }
 }
