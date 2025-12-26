@@ -840,7 +840,7 @@ impl Interpreter
       return_value = self.interpret_node(statement);
       match return_value
       {
-        VariableType::Return(_) => {
+        VariableType::Return(_) | VariableType::Break => {
           break;
         }
         _ => {}
@@ -1829,6 +1829,84 @@ mod tests
     } else {
         panic!("result should be an array");
     }
+  }
+
+  #[test]
+  fn test_break() {
+    let program = "
+        int result[10];
+        int main() {
+            int i = 0;
+            for (i = 0; i < 10; i = i + 1) {
+                if (i == 5) { break; }
+            }
+            return i;
+        }
+    ";
+    let (val, globals) = run_program(program);
+    assert_eq!(val, Int(5));
+  }
+
+  #[test]
+  fn test_break_while() {
+    let program = "
+        int main() {
+            int i = 0;
+            while (i < 10) {
+                if (i == 3) { break; }
+                i = i + 1;
+            }
+            return i;
+        }
+    ";
+    let (val, _) = run_program(program);
+    assert_eq!(val, Int(3));
+  }
+
+  #[test]
+  fn test_break_nested() {
+    let program = "
+        int main() {
+            int i = 0;
+            int j = 0;
+            int count = 0;
+            for (i = 0; i < 3; i = i + 1) {
+                for (j = 0; j < 10; j = j + 1) {
+                    if (j == 5) { break; }
+                    count = count + 1;
+                }
+            }
+            return count;
+        }
+    ";
+    let (val, _) = run_program(program);
+    // 外側のループが3回、内側のループがj=0,1,2,3,4の5回実行されるはずなので、3 * 5 = 15
+    assert_eq!(val, Int(15));
+  }
+
+  #[test]
+  fn test_break_deeply_nested_if() {
+    let program = "
+        int main() {
+            int i = 0;
+            int count = 0;
+            while (i < 10) {
+                if (i > 5) {
+                    if (1) {
+                        if (1) {
+                            break;
+                        }
+                    }
+                }
+                count = count + 1;
+                i = i + 1;
+            }
+            return count;
+        }
+    ";
+    let (val, _) = run_program(program);
+    // i=0,1,2,3,4,5 まで実行され、i=6でbreakするはずなので、countは6
+    assert_eq!(val, Int(6));
   }
 
   #[test]

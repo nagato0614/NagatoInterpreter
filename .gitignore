@@ -99,3 +99,4 @@ output*
 coverage
 .DS_Store
 *.profraw
+.output.txt
